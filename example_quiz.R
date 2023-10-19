@@ -50,8 +50,7 @@ tries_per_label <- select(quiztries, quiz_label, quiz_try) |>
     summarise(n = n(),
               mean_tries = mean(quiz_try),
               median_tries = median(quiz_try),
-              sd_tries = sd(quiz_try),
-              se_tries = sd(quiz_try) / sqrt(n)) |>
+              sd_tries = sd(quiz_try)) |>
     ungroup()
 
 tries_per_label

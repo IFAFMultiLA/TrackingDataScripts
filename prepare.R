@@ -1,6 +1,7 @@
 options(digits.secs = 4)
 
 library(dplyr)
+library(tidyr)
 library(jsonlite)
 
 
@@ -164,13 +165,23 @@ extract_mousetracking_data <- function(tracking_sess_data, tracking_sess_id) {
     frames_per_event <- bind_rows(frames_per_event) |>
         arrange(timestamp)
 
+    filled <- filter(frames_per_event, type == "mouse") |>
+        fill(xpath, css)
+
+    frames_per_event <- bind_rows(filter(frames_per_event, type != "mouse"), filled) |>
+        arrange(timestamp)
+
     track_data <- select(tracking_sess_data, chunk_id, event_time) |>
-        left_join(frames_per_event, by = "chunk_id") |>
+        inner_join(frames_per_event, by = "chunk_id") |>
         mutate(event_time = event_time + timestamp/1000) |>
         select(-c(chunk_id, timestamp))
+
+    stopifnot(sum(is.na(track_data$event_time)) == 0)
+
     if (all(order(track_data$event_time) != 1:nrow(track_data))) {
         warning(sprintf("order of events may be wrong for data in tracking session #%d", tracking_sess_id))
     }
+
     track_data
 }
 
@@ -228,14 +239,18 @@ mousetracking_complete <- group_by(mousedata, user_app_sess_code, user_app_sess_
     arrange(event_time) |>
     group_modify(extract_mousetracking_data)
 
-mousetracking_complete
-
 rm(mousedata)
 
-# combine the data, re-arrange by tracking session and event time
+# combine the data, re-arrange by tracking session and event time, fill down chapter data
 final <- bind_rows(nonmousedata_complete, mousetracking_complete) |>
-    arrange(user_app_sess_code, track_sess_id, event_time)
+    arrange(user_app_sess_code, track_sess_id, event_time) |>
+    fill(chapter_index, chapter_id) |>
+    mutate(user_app_sess_code = as.factor(user_app_sess_code),
+           type = as.factor(type),
+           chapter_id = as.factor(chapter_id),
+           ex_label = as.factor(ex_label))
 
+summary(final)
 
 # number of events per session
 group_by(final, user_app_sess_code, track_sess_id) |>

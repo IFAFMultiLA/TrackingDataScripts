@@ -10,12 +10,11 @@ library(jsonlite)
 
 # function to extract data not related to mouse tracking; parses the JSON string of each `event_value` in a given
 # dataframe `row` and returns a dataframe with a single row of parsed data
-extract_other_tracking_data <- function(row) {
+extract_other_tracking_data <- function(row, row_index) {
     v <- fromJSON(row$event_value, simplifyVector = FALSE)
     res <- data.frame(
-        tmp_id = row$tmp_id,
         type = row$event_type,         # one of "chapter", "device_info_update", "input_change", "ex_result",
-        # "ex_submit", "question_submit"
+                                       # "ex_submit", "question_submit"
         chapter_index = NA_integer_,   # content chapter index
         chapter_id = NA_character_,    # content chapter ID
         ex_label = NA_character_,   # exercise/question label
@@ -34,9 +33,32 @@ extract_other_tracking_data <- function(row) {
         res$chapter_index <- v$value$chapter_index
         res$chapter_id <- v$value$chapter_id
     } else if (row$event_type == "device_info_update") {
-        res$type <- "window"
-        res$coord1 <- v$window_size[[1]]
-        res$coord2 <- v$window_size[[2]]
+        type <- character()
+        coord1 <- numeric()
+        coord2 <- numeric()
+
+        if (!is.null(v$window_size)) {
+            type <- c(type, "window")
+            coord1 <- c(coord1, v$window_size[[1]])
+            coord2 <- c(coord2, v$window_size[[2]])
+        }
+
+        if (!is.null(v$main_content_viewsize)) {
+            type <- c(type, "main_content_viewsize")
+            coord1 <- c(coord1, v$main_content_viewsize[[1]])
+            coord2 <- c(coord2, v$main_content_viewsize[[2]])
+        }
+
+        if (!is.null(v$main_content_scrollsize)) {
+            type <- c(type, "main_content_scrollsize")
+            coord1 <- c(coord1, v$main_content_scrollsize[[1]])
+            coord2 <- c(coord2, v$main_content_scrollsize[[2]])
+        }
+
+        res <- res[rep(1, length(type)),]
+        res$type <- type
+        res$coord1 <- coord1
+        res$coord2 <- coord2
     } else if (row$event_type == "input_change") {
         res$xpath <- v$xpath
         res$css <- paste0('#', v$id)
@@ -70,7 +92,6 @@ extract_other_tracking_data <- function(row) {
         }
     } else {
         warning(paste("unknown event type:", row$event_type))
-        res$tmp_id <- NA_integer_
     }
 
     res
@@ -82,7 +103,7 @@ extract_other_tracking_data <- function(row) {
 parse_mousetracking_frame <- function(frame) {
     frame <- sapply(frame, function(x) { ifelse(is.null(x), NA_character_, x) })
 
-    if (!(frame[1] %in% c("w", "s", "m", "c", "i"))) {
+    if (!(frame[1] %in% c("w", "s", "S", "m", "c", "i"))) {
         warning(paste("unknown frame type:", frame[1]))
         return(NULL)
     }
@@ -103,11 +124,12 @@ parse_mousetracking_frame <- function(frame) {
         res$coord2 <- coord[2]
     }
 
-
     if (frame[1] == "w") {              # window size change
         res$type <- "window"
-    } else if (frame[1] == "s") {       # scroll position change
+    } else if (frame[1] == "s") {       # window scroll position change
         res$type <- "scroll"
+    } else if (frame[1] == "S") {       # main content scroll position change
+        res$type <- "contentscroll"
     } else if (frame[1] == "m") {       # mouse position change
         res$type <- "mouse"
         res$xpath <- frame[4]
@@ -204,7 +226,11 @@ sess_device_info <- bind_rows(lapply(sess$track_sess_device_info, function(jsons
         user_agent = NA_character_,
         form_factor = NA_character_,
         initial_win_width = NA_real_,
-        initial_win_height = NA_real_
+        initial_win_height = NA_real_,
+        initial_contentview_width = NA_real_,
+        initial_contentview_height = NA_real_,
+        initial_contentscroll_width = NA_real_,
+        initial_contentscroll_height = NA_real_
     )
     if (nchar(jsonstr) > 0) {
         parsed <- fromJSON(jsonstr)
@@ -212,6 +238,10 @@ sess_device_info <- bind_rows(lapply(sess$track_sess_device_info, function(jsons
         res$form_factor <- parsed$form_factor
         res$initial_win_width <- parsed$window_size[1]
         res$initial_win_height <- parsed$window_size[2]
+        res$initial_contentview_width <- parsed$main_content_viewsize[1]
+        res$initial_contentview_height <- parsed$main_content_viewsize[2]
+        res$initial_contentscroll_width <- parsed$main_content_scrollsize[1]
+        res$initial_contentscroll_height <- parsed$main_content_scrollsize[2]
     }
 
     res
@@ -235,9 +265,8 @@ nonmousedata <- left_join(sess, events, by = c('track_sess_id')) |>
 
 nonmousedata <- mutate(nonmousedata, tmp_id = 1:nrow(nonmousedata))
 
-parsed_nonmousedata <- rowwise(nonmousedata) |>
-    reframe(extract_other_tracking_data(pick(everything()))) |>
-    filter(!is.na(tmp_id))
+parsed_nonmousedata <- group_by(nonmousedata, tmp_id) |>
+    group_modify(extract_other_tracking_data)
 
 nonmousedata_complete <- select(nonmousedata, -c(event_type, event_value)) |>
     inner_join(parsed_nonmousedata, by = "tmp_id") |>
@@ -264,38 +293,68 @@ group_by(mousedata, user_app_sess_code, track_sess_id, track_sess_start, track_s
 # apply the parsing -- this takes some time
 mousetracking_complete <- group_by(mousedata, user_app_sess_code, user_app_sess_user_id,
                                    track_sess_id, track_sess_start, track_sess_end,
-                                   user_agent, form_factor, initial_win_width, initial_win_height) |>
+                                   user_agent, form_factor,
+                                   initial_win_width, initial_win_height,
+                                   initial_contentview_width, initial_contentview_height,
+                                   initial_contentscroll_width, initial_contentscroll_height) |>
     arrange(event_time) |>
     group_modify(extract_mousetracking_data) |>
+    arrange(event_time) |>    # individual events may be out of order otherwise
     ungroup()
 
 rm(mousedata)
 
+# ---- combine the data ----
+
+initial_chapt_id <- filter(nonmousedata_complete, chapter_index == 0) |>
+    distinct(chapter_id) |>
+    pull(chapter_id)
+
 # combine the data, re-arrange by tracking session and event time, fill down chapter data
 final <- bind_rows(nonmousedata_complete, mousetracking_complete) |>
     arrange(user_app_sess_code, track_sess_id, event_time) |>
-    fill(chapter_index, chapter_id) |>
     group_by(track_sess_id) |>
+    mutate(chapter_index = ifelse(row_number() == 1 & type != "chapter" & is.na(chapter_index),
+                                  0, chapter_index),
+           chapter_id = ifelse(row_number() == 1 & type != "chapter" & is.na(chapter_id),
+                               initial_chapt_id, chapter_id)) |>
+    fill(chapter_index, chapter_id) |>
     mutate(win_width = ifelse(row_number() == 1, initial_win_width, NA_real_),
            win_height = ifelse(row_number() == 1, initial_win_height, NA_real_),
+           contentview_width = ifelse(row_number() == 1, initial_contentview_width, NA_real_),
+           contentview_height = ifelse(row_number() == 1, initial_contentview_height, NA_real_),
+           contentscroll_width = ifelse(row_number() == 1, initial_contentscroll_width, NA_real_),
+           contentscroll_height = ifelse(row_number() == 1, initial_contentscroll_height, NA_real_),
            track_sess_end = as.POSIXct(ifelse(is.na(track_sess_end) & row_number() == n(),   # last event is end of
                                               event_time, track_sess_end))) |>               # tracking session
     fill(track_sess_end, .direction = "up") |>
     ungroup() |>
     mutate(user_app_sess_code = as.factor(user_app_sess_code),
-           type = as.factor(type),
            chapter_id = as.factor(chapter_id),
            ex_label = as.factor(ex_label),
            win_width = ifelse(type == "window", coord1, win_width),
            win_height = ifelse(type == "window", coord2, win_height),
-           scroll_x = ifelse(type == "scroll", coord1, NA_real_),
-           scroll_y = ifelse(type == "scroll", coord2, NA_real_)) |>
+           contentview_width = ifelse(type == "main_content_viewsize", coord1, contentview_width),
+           contentview_height = ifelse(type == "main_content_viewsize", coord2, contentview_height),
+           contentscroll_width = ifelse(type == "main_content_scrollsize", coord1, contentscroll_width),
+           contentscroll_height = ifelse(type == "main_content_scrollsize", coord2, contentscroll_height),
+           win_scroll_x = ifelse(type == "scroll", coord1, NA_real_),
+           win_scroll_y = ifelse(type == "scroll", coord2, NA_real_),
+           content_scroll_x = ifelse(type == "contentscroll", coord1, NA_real_),
+           content_scroll_y = ifelse(type == "contentscroll", coord2, NA_real_)) |>
     group_by(track_sess_id) |>
-    fill(user_agent, form_factor, initial_win_width, initial_win_height, win_width, win_height) |>
-    fill(scroll_x, scroll_y, .direction = "downup") |>
-    ungroup()
+    fill(user_agent, form_factor,
+         initial_win_width, initial_win_height, win_width, win_height,
+         initial_contentview_width, initial_contentview_height, contentview_width, contentview_height,
+         initial_contentscroll_width, initial_contentscroll_height, contentscroll_width, contentscroll_height) |>
+    fill(win_scroll_x, win_scroll_y, content_scroll_x, content_scroll_y, .direction = "downup") |>
+    ungroup() |>
+    filter(!(type %in% c("main_content_scrollsize", "main_content_viewsize", "window"))) |>
+    mutate(type = as.factor(type))
 
 summary(final)
+
+#filter(final, track_sess_id == max(final$track_sess_id)) |> View()
 
 track_sess_metadata <- distinct(final, user_app_sess_code, track_sess_id, track_sess_start, track_sess_end) |>
     mutate(duration = track_sess_end - track_sess_start)

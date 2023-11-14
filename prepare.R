@@ -266,7 +266,8 @@ mousetracking_complete <- group_by(mousedata, user_app_sess_code, user_app_sess_
                                    track_sess_id, track_sess_start, track_sess_end,
                                    user_agent, form_factor, initial_win_width, initial_win_height) |>
     arrange(event_time) |>
-    group_modify(extract_mousetracking_data)
+    group_modify(extract_mousetracking_data) |>
+    ungroup()
 
 rm(mousedata)
 
@@ -277,7 +278,9 @@ final <- bind_rows(nonmousedata_complete, mousetracking_complete) |>
     group_by(track_sess_id) |>
     mutate(win_width = ifelse(row_number() == 1, initial_win_width, NA_real_),
            win_height = ifelse(row_number() == 1, initial_win_height, NA_real_),
-           track_sess_end = as.POSIXct(ifelse(is.na(track_sess_end) & row_number() == n(), event_time, track_sess_end))) |>
+           track_sess_end = as.POSIXct(ifelse(is.na(track_sess_end) & row_number() == n(),   # last event is end of
+                                              event_time, track_sess_end))) |>               # tracking session
+    fill(track_sess_end, .direction = "up") |>
     ungroup() |>
     mutate(user_app_sess_code = as.factor(user_app_sess_code),
            type = as.factor(type),

@@ -225,6 +225,7 @@ sess_device_info <- bind_rows(lapply(sess$track_sess_device_info, function(jsons
     res <- data.frame(
         user_agent = NA_character_,
         form_factor = NA_character_,
+        client_ip = NA_character_,
         initial_win_width = NA_real_,
         initial_win_height = NA_real_,
         initial_contentview_width = NA_real_,
@@ -236,6 +237,7 @@ sess_device_info <- bind_rows(lapply(sess$track_sess_device_info, function(jsons
         parsed <- fromJSON(jsonstr)
         res$user_agent <- parsed$user_agent
         res$form_factor <- parsed$form_factor
+        res$client_ip <- parsed$client_ip
         res$initial_win_width <- parsed$window_size[1]
         res$initial_win_height <- parsed$window_size[2]
         res$initial_contentview_width <- parsed$main_content_viewsize[1]
@@ -293,7 +295,7 @@ group_by(mousedata, user_app_sess_code, track_sess_id, track_sess_start, track_s
 # apply the parsing -- this takes some time
 mousetracking_complete <- group_by(mousedata, user_app_sess_code, user_app_sess_user_id,
                                    track_sess_id, track_sess_start, track_sess_end,
-                                   user_agent, form_factor,
+                                   user_agent, form_factor, client_ip,
                                    initial_win_width, initial_win_height,
                                    initial_contentview_width, initial_contentview_height,
                                    initial_contentscroll_width, initial_contentscroll_height) |>

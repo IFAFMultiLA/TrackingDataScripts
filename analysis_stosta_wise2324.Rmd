@@ -1,0 +1,121 @@
+---
+title: "Data analysis *Testgenauigkeit Bayes* from exercise session *Stochastik und ind. Statistik* (Master Wirtschaftsinformatik) / Nov 15 2023"
+author: "Markus Konrad"
+date: "2023-11-16"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Preparation
+
+### Load data, helper functions
+
+```{r, message=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+source("analysis_helpers.R")
+
+tracking_data <- readRDS("temp/tracking_data.rds")
+```
+
+
+### Tracking session duration
+
+```{r}
+track_sess_times <- tracking_sess_times(tracking_data)
+
+plot_tracking_sess_durations(track_sess_times)
+```
+
+### Limit tracking session events to exercise time frame
+
+```{r}
+starttime <- strptime("2023-11-15 13:15", "%Y-%m-%d %H:%M")    # exercise start - 30 min.
+endtime <- strptime("2023-11-15 17:30", "%Y-%m-%d %H:%M")      # exercise end + 30 min.    
+
+tracking_data <- filter(tracking_data, event_time >= starttime, event_time <= endtime) |>
+    group_by(track_sess_id) |>
+    mutate(track_sess_start = min(track_sess_start, min(event_time)),
+           track_sess_end = min(track_sess_end, max(event_time))) |>
+    ungroup()
+
+track_sess_times <- tracking_sess_times(tracking_data)
+
+plot_tracking_sess_durations(track_sess_times)
+```
+
+```{r}
+plot_tracking_sess_durations_hist(track_sess_times, binwidth = 0.25)
+```
+
+- long interaction time
+
+```{r}
+median(track_sess_times$duration) |> as.double(units = "mins")
+```
+
+### Number of observations, unique users and event types
+
+- many observations
+
+```{r}
+dim(tracking_data)
+```
+
+- number of unique users:
+
+```{r}
+length(unique(tracking_data$user_app_sess_code))
+```
+
+- each user created only one tracking session:
+
+```{r}
+length(unique(tracking_data$track_sess_id))
+```
+
+- number of events per event type:
+
+```{r}
+res <- plot_event_type_counts(tracking_data)
+res$plot
+```
+
+
+```{r}
+res <- plot_event_type_counts(tracking_data)
+res$table
+```
+
+- number of events per event type in each tracking session:
+
+```{r, fig.width=9, fig.height=9}
+res <- plot_event_type_counts_per_tracking_sess(tracking_data)
+res$plot
+```
+
+- some students apparently did not submit code exercises, but all submitted answers on questions
+
+
+```{r}
+submit_event_counts <- filter(res$table, type %in% c("ex_result", "ex_submit", "question_submit")) |>
+    pivot_wider(names_from = type, values_from = n, values_fill = 0)
+submit_event_counts    
+```
+
+```{r}
+mutate(submit_event_counts, ex = ex_result + ex_submit) |>
+    select(-c(ex_result, ex_submit)) |>
+    filter(question_submit == 0 | ex == 0)
+```
+
+### Question and code exercise submissions
+
+
+
+### Mouse tracks

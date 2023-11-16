@@ -2,7 +2,7 @@
 title: "Data analysis *Testgenauigkeit Bayes* from exercise session *Stochastik und ind. Statistik* (Master Wirtschaftsinformatik) / Nov 15 2023"
 author: "Markus Konrad"
 date: "2023-11-16"
-output: pdf_document
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -14,10 +14,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ### Load data, helper functions
 
 ```{r, message=FALSE}
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-
 source("analysis_helpers.R")
 
 tracking_data <- readRDS("temp/tracking_data.rds")
@@ -79,6 +75,16 @@ length(unique(tracking_data$user_app_sess_code))
 length(unique(tracking_data$track_sess_id))
 ```
 
+- one user used a tablet, all others a laptop or desktop PC:
+
+```{r}
+group_by(tracking_data, track_sess_id) |>
+    distinct(form_factor) |>
+    ungroup() |>
+    count(form_factor)
+```
+
+
 - number of events per event type:
 
 ```{r}
@@ -116,6 +122,65 @@ mutate(submit_event_counts, ex = ex_result + ex_submit) |>
 
 ### Question and code exercise submissions
 
+- proportion of correct answers per question:
+
+```{r}
+quest_data <- question_submit_data(tracking_data)
+res <- plot_question_prop_correct(quest_data)
+res$plot
+```
+
+```{r}
+res$table
+```
+
+- number of tries per question:
+
+```{r}
+quiz_tries <- question_submit_tries(quest_data)
+```
+
+```{r}
+plot_question_n_tries(quiz_tries)
+```
+
+- interestingly, each question was finally answered correctly – no one gave up in between:
+
+```{r}
+all(quiz_tries$ex_correct)
+```
+
+- only a few coding exercises were tried, and even fewer succeeded
+
+```{r}
+ex_data <- exercise_result_data(tracking_data)
+res <- plot_exercise_prop_correct(ex_data)
+res$plot
+```
+
+```{r}
+res$table
+```
+
+- often, the submitted code is not correct R code
+- furthermore, students don't understand that the last output is the result but assume that the have to use
+  `print(...)` to return the result
+
+```{r}
+filter(ex_data, !ex_correct) |>
+    pull(value) |>
+    trimws() |>
+    paste(collapse = "\n---\n") |>
+    cat()
+```
 
 
 ### Mouse tracks
+
+
+```{r, fig.width=9, fig.height=5}
+for (track_sess_id in sort(unique(tracking_data$track_sess_id))) {
+    print(plot_mouse_tracks_for_tracking_session(tracking_data, track_sess_id))
+}
+```
+

@@ -16,7 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r, message=FALSE}
 source("analysis_helpers.R")
 
-tracking_data <- readRDS("temp/tracking_data.rds")
+tracking_data <- readRDS("data/prepared/f33ac92fb8_tracking_data.rds")
 ```
 
 

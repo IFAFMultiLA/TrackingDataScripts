@@ -3,7 +3,7 @@ library(ggplot2)
 library(patchwork)
 
 
-tracking_data <- readRDS("temp/tracking_data.rds")
+tracking_data <- readRDS("data/prepared/8d97149cd2_tracking_data.rds")
 tracking_data
 
 count(tracking_data, track_sess_id)
@@ -33,7 +33,7 @@ median(track_sessions$duration) |> as.double(units = "hours")
 
 max(tracking_data$track_sess_id)
 
-sess_data <- filter(tracking_data, track_sess_id == 175) |>
+sess_data <- filter(tracking_data, track_sess_id == 195) |>
     select(-c(user_app_sess_code, user_app_sess_user_id, track_sess_id))
 
 table(sess_data$type)

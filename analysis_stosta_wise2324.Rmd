@@ -137,7 +137,7 @@ res$table
 - number of tries per question:
 
 ```{r}
-quiz_tries <- question_submit_tries(quest_data)
+quiz_tries <- question_or_exercise_submit_tries(quest_data)
 ```
 
 ```{r}
@@ -150,17 +150,40 @@ plot_question_n_tries(quiz_tries)
 all(quiz_tries$ex_correct)
 ```
 
+```{r}
+quiz_prop_correct_per_try <- prop_correct_in_ith_try(quest_data)
+plot_prop_correct_per_try(quiz_prop_correct_per_try, "Proportion of correct quiz answers per number of tries")
+```
+
+
 - only a few coding exercises were tried, and even fewer succeeded
 
 ```{r}
 ex_data <- exercise_result_data(tracking_data)
-res <- plot_exercise_prop_correct(ex_data)
-res$plot
+ex_tries <- question_or_exercise_submit_tries(ex_data)
+group_by(ex_tries, ex_label) |>
+    summarise(n = n(),
+              prop_correct = mean(ex_correct))
 ```
 
 ```{r}
-res$table
+plot_exercise_n_tries(ex_tries)
 ```
+
+
+- all in all less then a third of the exercise were answered correctly in the end, means most students gave up
+
+```{r}
+mean(ex_tries$ex_correct)
+```
+
+```{r}
+ex_prop_correct_per_try <- prop_correct_in_ith_try(ex_data)
+plot_prop_correct_per_try(ex_prop_correct_per_try, "Proportion of correct code submissions per number of tries")
+```
+
+- (on try 6, someone in tracking session #185 made a correct submission and then regressed to a wrong submission afterwards)
+
 
 - often, the submitted code is not correct R code
 - furthermore, students don't understand that the last output is the result but assume that the have to use

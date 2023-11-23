@@ -1,4 +1,6 @@
+library(plyr)
 library(dplyr)
+library(bcpa)
 library(tidyr)
 library(ggplot2)
 library(patchwork)
@@ -63,12 +65,13 @@ prop_correct_in_ith_try <- function(quest_or_ex_data) {
 
 mouse_tracks_for_tracking_sess <- function(tracking_data, tracking_sess_id) {
     sess_data <- filter(tracking_data, track_sess_id == tracking_sess_id) |>
-        select(-c(user_app_sess_code, user_app_sess_user_id, track_sess_id))
+        select(-c(user_app_sess_code, user_app_sess_user_id, track_sess_id)) |>
+        mutate(chapter_changes = cumsum(c(0, abs(diff(chapter_index)))))
 
     form_factor <- unique(sess_data$form_factor)
     stopifnot(length(form_factor) == 1)
 
-    tracks <- group_by(sess_data, chapter_index, chapter_id) |>
+    tracks <- group_by(sess_data, chapter_changes) |>
         mutate(chapt_content_width = max(win_width) - max(contentview_width) + max(contentscroll_width),
                chapt_content_height = max(win_height) - max(contentview_height) + max(contentscroll_height),
                time = as.double(event_time - min(event_time)), units = "secs") |>
@@ -76,10 +79,23 @@ mouse_tracks_for_tracking_sess <- function(tracking_data, tracking_sess_id) {
         filter(type %in% c("mouse", "click")) |>
         mutate(mouse_x = (coord1 + content_scroll_x) / chapt_content_width,
                mouse_y = (coord2 + content_scroll_y) / chapt_content_height) |>
-        select(chapter_index, chapter_id, time, type, mouse_x, mouse_y,
+        select(chapter_changes, chapter_index, chapter_id, time, type, mouse_x, mouse_y,
                chapt_content_width, chapt_content_height)
 
     list(tracks = tracks, form_factor = form_factor)
+}
+
+mouse_tracks_features <- function(mouse_tracks_data) {
+    track <- MakeTrack(mouse_tracks_data$mouse_x, mouse_tracks_data$mouse_y, mouse_tracks_data$time / 60)
+    track_vt <- GetVT(track, units = "min", skiplast = FALSE)
+
+    t_steps <- 0:ceiling(max(track_vt$T.end))
+    track_vt$t_step <- cut(track_vt$T.end, t_steps, labels = FALSE, ordered_result = TRUE)
+
+    group_by(track_vt, t_step) |>
+        summarise(mean_t_step_V = mean(V)) |>
+        filter(!is.na(mean_t_step_V) & is.finite(mean_t_step_V)) |>
+        ungroup()
 }
 
 plot_tracking_sess_durations <- function(track_sess_times) {
@@ -163,8 +179,9 @@ plot_exercise_n_tries <- function(ex_tries) {
         labs(title = "Number of tries per exercise", y = "exercise label", x = "number of tries")
 }
 
-plot_mouse_tracks_for_chapter <- function(chapt_index, mouse_tracks_data) {
-    chapt_data <- filter(mouse_tracks_data, chapter_index == chapt_index)
+plot_mouse_tracks_for_chapter <- function(chapt_change_number, mouse_tracks_data) {
+    chapt_data <- filter(mouse_tracks_data, chapter_changes == chapt_change_number)
+    chapt_index <- unique(chapt_data$chapter_index)
     chapt_id <- sub("section-", "", unique(chapt_data$chapter_id), fixed = TRUE)
 
     ggplot() +
@@ -177,19 +194,17 @@ plot_mouse_tracks_for_chapter <- function(chapt_index, mouse_tracks_data) {
         scale_y_reverse(limits = c(1, 0)) +
         scale_color_continuous(name = "time in sec.") +
         coord_fixed() +
-        labs(title = sprintf("Chapter %d", chapt_index+1), subtitle = chapt_id, x = "x", y = "y") +
+        labs(title = sprintf("%d: Chapter %d", chapt_change_number+1, chapt_index+1),
+             subtitle = chapt_id, x = "x", y = "y") +
         theme_minimal()
 }
 
-plot_mouse_tracks_for_tracking_session <- function(tracking_data, track_sess_id) {
-    res <- mouse_tracks_for_tracking_sess(tracking_data, track_sess_id)
-    mouse_tracks_data <- res$tracks
-
-    trackplots_per_chapt <- lapply(sort(unique(mouse_tracks_data$chapter_index)),
+plot_mouse_tracks_for_tracking_session <- function(mouse_tracks_data, track_sess_id, form_factor) {
+    trackplots_per_chapt <- lapply(sort(unique(mouse_tracks_data$chapter_changes)),
                                    plot_mouse_tracks_for_chapter, mouse_tracks_data)
 
     wrap_plots(trackplots_per_chapt) +
-        plot_annotation(title = sprintf("Tracking session #%d (%s)", track_sess_id, res$form_factor))
+        plot_annotation(title = sprintf("Tracking session #%d (%s)", track_sess_id, form_factor))
 }
 
 plot_prop_correct_per_try <- function(prop_correct_per_try, title) {
@@ -200,3 +215,15 @@ plot_prop_correct_per_try <- function(prop_correct_per_try, title) {
         scale_color_discrete(name = "Label") +
         labs(title = title, x = "Try", y = "Proportion of correct submissions")
 }
+
+plot_mouse_velocity_heatmap <- function(tracks_features_per_track_sess) {
+    ggplot(tracks_features_per_track_sess, aes(x = t_step, y = as.factor(track_sess_id))) +
+        geom_tile(aes(fill = mean_t_step_V)) +
+        scale_fill_binned(name = "mean velocity\nin pixels/sec") +
+        labs(title = "Heatmap of movement velocity per minute in each tracking session",
+             x = "Minute after tracking session start",
+             y = "Tracking session ID")
+}
+
+
+

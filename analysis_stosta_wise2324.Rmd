@@ -202,8 +202,41 @@ filter(ex_data, !ex_correct) |>
 
 
 ```{r, fig.width=9, fig.height=5}
+tracks_features <- list()
+
 for (track_sess_id in sort(unique(tracking_data$track_sess_id))) {
-    print(plot_mouse_tracks_for_tracking_session(tracking_data, track_sess_id))
+    mouse_tracks_data <- mouse_tracks_for_tracking_sess(tracking_data, track_sess_id)
+    form_factor <- mouse_tracks_data$form_factor
+    mouse_tracks_data <- mouse_tracks_data$tracks
+    
+    tracksess_tracks_features <- mouse_tracks_features(mouse_tracks_data)
+    tracksess_tracks_features$track_sess_id <- track_sess_id
+    tracks_features[[track_sess_id]] <- tracksess_tracks_features
+    
+    print(plot_mouse_tracks_for_tracking_session(mouse_tracks_data, track_sess_id, form_factor))
 }
+```
+
+
+```{r}
+tracks_features_per_track_sess <- bind_rows(tracks_features) |>
+    arrange(track_sess_id, t_step)
+
+tracks_features_per_track_sess_filled <-
+    expand.grid(track_sess_id = sort(unique(tracks_features_per_track_sess$track_sess_id)),
+            t_step = 1:max(tracks_features_per_track_sess$t_step)) |>
+    left_join(tracks_features_per_track_sess, c('track_sess_id', 't_step')) |>
+    arrange(track_sess_id, t_step) |>
+    mutate(mean_t_step_V = ifelse(is.na(mean_t_step_V), 0, mean_t_step_V))
+```
+
+```{r}
+plot_mouse_velocity_heatmap(tracks_features_per_track_sess_filled)
+```
+
+
+```{r}
+filter(tracks_features_per_track_sess_filled, t_step <= 10) |>
+    plot_mouse_velocity_heatmap()
 ```
 

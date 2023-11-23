@@ -23,13 +23,42 @@ exercise_result_data <- function(tracking_data) {
         mutate(ex_correct = ifelse(is.na(ex_correct), FALSE, ex_correct))
 }
 
-question_submit_tries <- function(quest_data) {
-    select(quest_data, -value) |>
+question_or_exercise_submit_tries <- function(quest_or_ex_data) {
+    select(quest_or_ex_data, -value) |>
         group_by(track_sess_id, ex_label) |>
         arrange(track_sess_id, ex_label, event_time) |>
-        mutate(quiz_try = row_number()) |>
+        mutate(try = row_number()) |>
         filter(row_number() == n()) |>
         ungroup()
+}
+
+prop_correct_in_ith_try <- function(quest_or_ex_data) {
+    max_tries <- select(quest_or_ex_data, -value) |>
+        group_by(track_sess_id, ex_label) |>
+        count() |>
+        ungroup() |>
+        pull(n) |>
+        max()
+
+    lapply(1:max_tries, function(which_try) {
+        select(quest_or_ex_data, -value) |>
+            group_by(track_sess_id, ex_label) |>
+            arrange(track_sess_id, ex_label, event_time) |>
+            mutate(try = row_number(), max_try = max(try)) |>
+            filter(try == min(max_try, which_try)) |>
+            ungroup() |>
+            group_by(ex_label) |>
+            summarise(prop_correct = mean(ex_correct)) |>
+            ungroup() |>
+            mutate(try = which_try)
+    }) |> bind_rows() |>
+        group_by(ex_label) |>
+        mutate(lag_correct = lag(prop_correct)) |>
+        filter(is.na(lag_correct) | lag_correct < 1) |>
+        ungroup() |>
+        arrange(ex_label, try) |>
+        select(-lag_correct)
+
 }
 
 mouse_tracks_for_tracking_sess <- function(tracking_data, tracking_sess_id) {
@@ -103,7 +132,6 @@ plot_question_prop_correct <- function(quest_data) {
     list(plot = p, table = prop_per_question)
 }
 
-
 plot_exercise_prop_correct <- function(ex_data) {
     prop_per_question <- group_by(ex_data, ex_label) |>
         summarise(n = n(),
@@ -119,13 +147,20 @@ plot_exercise_prop_correct <- function(ex_data) {
     list(plot = p, table = prop_per_question)
 }
 
-
 plot_question_n_tries <- function(quiz_tries) {
-    ggplot(quiz_tries, aes(y = ex_label, x = quiz_try)) +
+    ggplot(quiz_tries, aes(y = ex_label, x = try)) +
         geom_boxplot() +
         geom_jitter(height = 0.25) +
         scale_y_discrete(limits = rev) +
         labs(title = "Number of tries per question", y = "question label", x = "number of tries")
+}
+
+plot_exercise_n_tries <- function(ex_tries) {
+    ggplot(ex_tries, aes(y = ex_label, x = try)) +
+        geom_boxplot() +
+        geom_jitter(height = 0.25) +
+        scale_y_discrete(limits = rev) +
+        labs(title = "Number of tries per exercise", y = "exercise label", x = "number of tries")
 }
 
 plot_mouse_tracks_for_chapter <- function(chapt_index, mouse_tracks_data) {
@@ -157,3 +192,11 @@ plot_mouse_tracks_for_tracking_session <- function(tracking_data, track_sess_id)
         plot_annotation(title = sprintf("Tracking session #%d (%s)", track_sess_id, res$form_factor))
 }
 
+plot_prop_correct_per_try <- function(prop_correct_per_try, title) {
+    ggplot(prop_correct_per_try, aes(x = try, y = prop_correct, color = ex_label)) +
+        geom_line() +
+        scale_x_continuous(breaks = 1:max(prop_correct_per_try$try)) +
+        scale_y_continuous(limits = c(0, 1)) +
+        scale_color_discrete(name = "Label") +
+        labs(title = title, x = "Try", y = "Proportion of correct submissions")
+}

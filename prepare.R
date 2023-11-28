@@ -184,6 +184,11 @@ extract_mousetracking_data <- function(tracking_sess_data, tracking_sess_id) {
         if (length(filtered_frames) > 0) {
             # parse the filtered frames
             frames_df <- bind_rows(lapply(filtered_frames, parse_mousetracking_frame))
+            if (!is.null(event$startedAtISODate) && is.character(event$startedAtISODate)) {
+                frames_df$mouse_tracking_starttime <- as.POSIXct(gsub("T", " ", event$startedAtISODate))
+            } else {
+                frames_df$mouse_tracking_starttime <- NA
+            }
             frames_df$chunk_id <- event$chunk_id
             return(frames_df)
         } else {
@@ -205,8 +210,10 @@ extract_mousetracking_data <- function(tracking_sess_data, tracking_sess_id) {
 
     track_data <- select(tracking_sess_data, chunk_id, event_time) |>
         inner_join(frames_per_event, by = "chunk_id") |>
-        mutate(event_time = mouse_event_start + timestamp/1000) |>
-        select(-c(chunk_id, timestamp)) |>
+        mutate(event_time = as.POSIXct(ifelse(is.na(mouse_tracking_starttime),
+                                       mouse_event_start + timestamp/1000,
+                                       mouse_tracking_starttime + timestamp/1000))) |>
+        select(-c(chunk_id, timestamp, mouse_tracking_starttime)) |>
         arrange(event_time)
 
     stopifnot(nrow(track_data) == nrow(frames_per_event))

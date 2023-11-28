@@ -1,6 +1,6 @@
 source("analysis_helpers.R")
 
-inspect_track_sess_id <- 345
+inspect_track_sess_id <- 349
 
 tracking_data <- readRDS("data/prepared/476bc20dbf_tracking_data.rds") |>
     filter(track_sess_id == inspect_track_sess_id)

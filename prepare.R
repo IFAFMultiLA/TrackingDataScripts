@@ -5,6 +5,9 @@ library(tidyr)
 library(jsonlite)
 
 
+FILTER_START_DATE <- as.POSIXlt("2023-11-06")
+
+
 # ---- function definitions ----
 
 
@@ -197,11 +200,16 @@ extract_mousetracking_data <- function(tracking_sess_data, tracking_sess_id) {
     frames_per_event <- bind_rows(filter(frames_per_event, type != "mouse"), filled) |>
         arrange(timestamp)
 
+    mouse_event_start <- min(tracking_sess_data$event_time) +
+        filter(frames_per_event, type == "mouse") |> pull(timestamp) |> min() / 1000
+
     track_data <- select(tracking_sess_data, chunk_id, event_time) |>
         inner_join(frames_per_event, by = "chunk_id") |>
-        mutate(event_time = event_time + timestamp/1000) |>
-        select(-c(chunk_id, timestamp))
+        mutate(event_time = mouse_event_start + timestamp/1000) |>
+        select(-c(chunk_id, timestamp)) |>
+        arrange(event_time)
 
+    stopifnot(nrow(track_data) == nrow(frames_per_event))
     stopifnot(sum(is.na(track_data$event_time)) == 0)
 
     if (all(order(track_data$event_time) != 1:nrow(track_data))) {
@@ -265,7 +273,9 @@ load_app_sess_data <- function(app_sess_id) {
         mutate(track_sess_start = as.POSIXct(gsub("T", " ", track_sess_start)),
                track_sess_end = as.POSIXct(gsub("T", " ", ifelse(track_sess_end == "", NA, track_sess_end))),
                event_time = as.POSIXct(gsub("T", " ", event_time))) |>
-        select(-app_sess_code)
+        select(-app_sess_code) |>
+        arrange(event_time) |>
+        filter(track_sess_start >= FILTER_START_DATE, event_time >= FILTER_START_DATE)
 
     nonmousedata <- mutate(nonmousedata, tmp_id = 1:nrow(nonmousedata))
 
@@ -286,7 +296,9 @@ load_app_sess_data <- function(app_sess_id) {
         mutate(track_sess_start = as.POSIXct(gsub("T", " ", track_sess_start)),
                track_sess_end = as.POSIXct(gsub("T", " ", ifelse(track_sess_end == "", NA, track_sess_end))),
                event_time = as.POSIXct(gsub("T", " ", event_time))) |>
-        select(-c(app_sess_code, event_type))
+        select(-c(app_sess_code, event_type)) |>
+        arrange(event_time) |>
+        filter(track_sess_start >= FILTER_START_DATE, event_time >= FILTER_START_DATE)
 
     # count mouse event chunks per tracking session
     group_by(mousedata, user_app_sess_code, track_sess_id, track_sess_start, track_sess_end) |>

@@ -211,9 +211,12 @@ for (track_sess_id in sort(unique(tracking_data$track_sess_id))) {
     
     tracksess_tracks_features <- mouse_tracks_features(mouse_tracks_data)
     tracksess_tracks_features$track_sess_id <- track_sess_id
+    tracksess_tracks_features$form_factor <- form_factor
     tracks_features[[track_sess_id]] <- tracksess_tracks_features
     
-    print(plot_mouse_tracks_for_tracking_session(mouse_tracks_data, track_sess_id, form_factor))
+    print(plot_mouse_tracks_for_tracking_session(mouse_tracks_data, track_sess_id, form_factor,
+                                                 x_limits = c(0, 1),
+                                                 y_limits= c(1.5, 0)))
 }
 ```
 
@@ -227,7 +230,8 @@ tracks_features_per_track_sess_filled <-
             t_step = 1:max(tracks_features_per_track_sess$t_step)) |>
     left_join(tracks_features_per_track_sess, c('track_sess_id', 't_step')) |>
     arrange(track_sess_id, t_step) |>
-    mutate(mean_t_step_V = ifelse(is.na(mean_t_step_V), 0, mean_t_step_V))
+    mutate(mean_t_step_V = ifelse(is.na(mean_t_step_V), 0, mean_t_step_V)) |>
+    fill(form_factor)
 ```
 
 ```{r}

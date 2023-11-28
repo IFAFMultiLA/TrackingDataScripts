@@ -71,12 +71,12 @@ mouse_tracks_for_tracking_sess <- function(tracking_data, tracking_sess_id) {
     form_factor <- unique(sess_data$form_factor)
     stopifnot(length(form_factor) == 1)
 
-    tracks <- group_by(sess_data, chapter_changes) |>
+    tracks <- filter(sess_data, type %in% c("mouse", "click")) |>
+        group_by(chapter_changes) |>
         mutate(chapt_content_width = max(win_width) - max(contentview_width) + max(contentscroll_width),
-               chapt_content_height = max(win_height) - max(contentview_height) + max(contentscroll_height),
+               chapt_content_height = max(max(win_height) + max(contentscroll_height), (coord2 + content_scroll_y)),
                time = as.double(event_time - min(event_time)), units = "secs") |>
         ungroup() |>
-        filter(type %in% c("mouse", "click")) |>
         mutate(mouse_x = (coord1 + content_scroll_x) / chapt_content_width,
                mouse_y = (coord2 + content_scroll_y) / chapt_content_height) |>
         select(chapter_changes, chapter_index, chapter_id, time, type, mouse_x, mouse_y,

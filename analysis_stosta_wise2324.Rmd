@@ -214,9 +214,9 @@ for (track_sess_id in sort(unique(tracking_data$track_sess_id))) {
     tracksess_tracks_features$form_factor <- form_factor
     tracks_features[[track_sess_id]] <- tracksess_tracks_features
     
-    print(plot_mouse_tracks_for_tracking_session(mouse_tracks_data, track_sess_id, form_factor,
-                                                 x_limits = c(0, 1),
-                                                 y_limits= c(1.5, 0)))
+    #print(c(track_sess_id, min(mouse_tracks_data$mouse_y), max(mouse_tracks_data$mouse_y)))
+    
+    print(plot_mouse_tracks_for_tracking_session(mouse_tracks_data, track_sess_id, form_factor))
 }
 ```
 

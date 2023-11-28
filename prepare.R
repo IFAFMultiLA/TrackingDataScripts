@@ -184,6 +184,9 @@ extract_mousetracking_data <- function(tracking_sess_data, tracking_sess_id) {
         if (length(filtered_frames) > 0) {
             # parse the filtered frames
             frames_df <- bind_rows(lapply(filtered_frames, parse_mousetracking_frame))
+
+            # newer event data (since Nov. 28 2023) has a "startedAtISODate" value as time reference for the event
+            # frame timestamps
             if (!is.null(event$startedAtISODate) && is.character(event$startedAtISODate)) {
                 frames_df$mouse_tracking_starttime <- as.POSIXct(gsub("T", " ", event$startedAtISODate))
             } else {
@@ -205,7 +208,9 @@ extract_mousetracking_data <- function(tracking_sess_data, tracking_sess_id) {
     frames_per_event <- bind_rows(filter(frames_per_event, type != "mouse"), filled) |>
         arrange(timestamp)
 
-    mouse_event_start <- min(tracking_sess_data$event_time) +
+    # older event data (before Nov. 28 2023) has no "startedAtISODate" value, hence we must use the first event time
+    # as time reference for the mouse events
+    mouse_event_start <- min(tracking_sess_data$event_time) -
         filter(frames_per_event, type == "mouse") |> pull(timestamp) |> min() / 1000
 
     track_data <- select(tracking_sess_data, chunk_id, event_time) |>

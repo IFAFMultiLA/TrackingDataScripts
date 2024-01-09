@@ -64,6 +64,7 @@ prop_correct_in_ith_try <- function(quest_or_ex_data) {
 }
 
 mouse_tracks_for_tracking_sess <- function(tracking_data, tracking_sess_id) {
+    # filter for the tracking session and generate `chapter_changes` as number of the previous switches between chapters
     sess_data <- filter(tracking_data, track_sess_id == tracking_sess_id) |>
         select(-c(user_app_sess_code, user_app_sess_user_id, track_sess_id)) |>
         mutate(chapter_changes = cumsum(c(0, abs(diff(chapter_index)))))
@@ -71,6 +72,10 @@ mouse_tracks_for_tracking_sess <- function(tracking_data, tracking_sess_id) {
     form_factor <- unique(sess_data$form_factor)
     stopifnot(length(form_factor) == 1)
 
+    # generate the mouse tracks data: filter for the mouse-related events; group by chapter changes; set the content
+    # bounds for the current chapter view; set the time as time since the start of the current chapter view;
+    # calculate the mouse coordinates as normalized coordinates relative to the content bounds so they are in
+    # [0, 1] range
     tracks <- filter(sess_data, type %in% c("mouse", "click")) |>
         group_by(chapter_changes) |>
         mutate(chapt_content_width = max(win_width) - max(contentview_width) + max(contentscroll_width),

@@ -1,3 +1,12 @@
+# Data preparation script.
+#
+# Transforms the raw tracking data for all application sessions given in folder `data/raw` to a dataframes that can
+# be used for analyses. The output dataframes will be stored under `data/prepared`.
+#
+# Author: Markus Konrad <markus.konrad@htw-berlin.de>
+# Date: Nov./Dec. 2023
+#
+
 options(digits.secs = 4)
 
 library(dplyr)

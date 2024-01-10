@@ -1,3 +1,11 @@
+# Data analysis helper functions.
+#
+# Several helper functions used for tracking data analyses.
+#
+# Author: Markus Konrad <markus.konrad@htw-berlin.de>
+# Date: Nov./Dec. 2023
+#
+
 library(plyr)
 library(dplyr)
 library(bcpa)
@@ -6,35 +14,46 @@ library(ggplot2)
 library(patchwork)
 
 
-theme_set(theme_bw())
+theme_set(theme_bw())  # set default theme
 
+# Get start date, end date and duration for each tracking session in `tracking_data`.
 tracking_sess_times <- function(tracking_data) {
     distinct(tracking_data, track_sess_id, track_sess_start, track_sess_end) |>
         arrange(track_sess_start) |>
         mutate(duration = track_sess_end - track_sess_start)
 }
 
+# Get all tracking data related to question submissions in `tracking_data`.
 question_submit_data <- function(tracking_data) {
     filter(tracking_data, type == "question_submit") |>
         select(track_sess_id, event_time, ex_label, ex_correct, value)
 }
 
+# Get all tracking data related to code exercises in `tracking_data`.
 exercise_result_data <- function(tracking_data) {
+    # in step 3, `ex_correct` is transformed so that exercises where there was no result submitted (i.e. NA) are counted
+    # as "not correct"
     filter(tracking_data, type  == "ex_result") |>
         select(track_sess_id, event_time, type, starts_with("ex_"), value) |>
         mutate(ex_correct = ifelse(is.na(ex_correct), FALSE, ex_correct))
 }
 
+# Calculate number of question submission or code submission tries as variable `try` until the user was correct or has
+# given up as. Pass `quest_or_ex_data` as question or code submission data returned from the functions
+# `question_submit_data()` or `exercise_result_data()`.
 question_or_exercise_submit_tries <- function(quest_or_ex_data) {
     select(quest_or_ex_data, -value) |>
-        group_by(track_sess_id, ex_label) |>
+        group_by(track_sess_id, ex_label) |>    # calculate per tracking session and exercise
         arrange(track_sess_id, ex_label, event_time) |>
-        mutate(try = row_number()) |>
-        filter(row_number() == n()) |>
+        mutate(try = row_number()) |>           # current try equals the row number after sorting by time
+        filter(row_number() == n()) |>          # select only the last row per group to get the final try count
         ungroup()
 }
 
+# Calculate the proportion of correct answers per exercise and try as variable `prop_correct`. Pass `quest_or_ex_data`
+# as question or code submission data returned from the functions `question_submit_data()` or `exercise_result_data()`.
 prop_correct_in_ith_try <- function(quest_or_ex_data) {
+    # get the maximum number of tries in total
     max_tries <- select(quest_or_ex_data, -value) |>
         group_by(track_sess_id, ex_label) |>
         count() |>
@@ -42,27 +61,44 @@ prop_correct_in_ith_try <- function(quest_or_ex_data) {
         pull(n) |>
         max()
 
+    # for each number of tries in range [1, `max_tries`], calculate the proportion of correct answers per exercise
     lapply(1:max_tries, function(which_try) {
         select(quest_or_ex_data, -value) |>
-            group_by(track_sess_id, ex_label) |>
+            group_by(track_sess_id, ex_label) |>                # for each exercise in each tracking session ...
             arrange(track_sess_id, ex_label, event_time) |>
-            mutate(try = row_number(), max_try = max(try)) |>
-            filter(try == min(max_try, which_try)) |>
+            mutate(try = row_number(), max_try = max(try)) |>   # ... get each try and the overall number of tries and
+            filter(try == min(max_try, which_try)) |>      # ... filter for the current try or the last try as fallback;
             ungroup() |>
-            group_by(ex_label) |>
-            summarise(prop_correct = mean(ex_correct)) |>
+            group_by(ex_label) |>                          # then calculate the proportion of correct answers for ...
+            summarise(prop_correct = mean(ex_correct)) |>  # ... each exercise
             ungroup() |>
             mutate(try = which_try)
-    }) |> bind_rows() |>
+    }) |> bind_rows() |>                                   # concatenate to single dataframe
         group_by(ex_label) |>
-        mutate(lag_correct = lag(prop_correct)) |>
-        filter(is.na(lag_correct) | lag_correct < 1) |>
+        mutate(lag_correct = lag(prop_correct)) |>         # keep only observations where prev. try was first try or
+        filter(is.na(lag_correct) | lag_correct < 1) |>    # was not 100% correct, yet
         ungroup() |>
         arrange(ex_label, try) |>
         select(-lag_correct)
 
 }
 
+# Generate mouse tracking data from tracking dataframe `tracking_data` for a single tracking session given as
+# `tracking_sess_id`. The mouse tracks are calculated per chapter view identified via variable `chapter_changes`.
+# Returns a list with the mouse tracking data as "$tracks" and the form factor of the device used
+# during the tracking session as "$form_factor".
+#
+# The mouse tracking data contains the following variables:
+# - `chapter_changes`: number of times the chapter was changed previously
+# - `chapter_index`: index number of the current chapter
+# - `chapter_id`: ID of the current chapter
+# - `time`: time in seconds measured since the start of the current chapter view (i.e. always starts at 0 per
+#           group `chapter_changes`)
+# - `type`: either "mouse" or "click", the former describing movement
+# - `mouse_x` and `mouse_y`: mouse pointer coordinates in range [0, 1] relative to `chapt_content_width` and
+#   `chapt_content_height`
+# - `chapt_content_width` and `chapt_content_height`: content dimensions for the current chapter view
+#
 mouse_tracks_for_tracking_sess <- function(tracking_data, tracking_sess_id) {
     # filter for the tracking session and generate `chapter_changes` as number of the previous switches between chapters
     sess_data <- filter(tracking_data, track_sess_id == tracking_sess_id) |>
@@ -90,13 +126,20 @@ mouse_tracks_for_tracking_sess <- function(tracking_data, tracking_sess_id) {
     list(tracks = tracks, form_factor = form_factor)
 }
 
+# Calculate features for mouse tracks given in `mouse_tracks_data` (as returned from
+# `mouse_tracks_for_tracking_sess()`). Current only feature is mean step velocity per step in pixels per second.
+# See `bcpa::GetVT()` for details.
 mouse_tracks_features <- function(mouse_tracks_data) {
+    # generate the track
     track <- MakeTrack(mouse_tracks_data$mouse_x, mouse_tracks_data$mouse_y, mouse_tracks_data$time / 60)
+    # calculate the features
     track_vt <- GetVT(track, units = "min", skiplast = FALSE)
 
+    # generate discrete time steps: each step is one minute
     t_steps <- 0:ceiling(max(track_vt$T.end))
     track_vt$t_step <- cut(track_vt$T.end, t_steps, labels = FALSE, ordered_result = TRUE)
 
+    # calculate the mean velocity per time step
     group_by(track_vt, t_step) |>
         summarise(mean_t_step_V = mean(V)) |>
         filter(!is.na(mean_t_step_V) & is.finite(mean_t_step_V)) |>

@@ -136,8 +136,8 @@ mouse_tracks_features <- function(mouse_tracks_data) {
     track_vt <- GetVT(track, units = "min", skiplast = FALSE)
 
     # generate discrete time steps: each step is one minute
-    t_steps <- 0:ceiling(max(track_vt$T.end))
-    track_vt$t_step <- cut(track_vt$T.end, t_steps, labels = FALSE, ordered_result = TRUE)
+    t_steps <- -1:ceiling(max(track_vt$T.end))
+    track_vt$t_step <- cut(track_vt$T.end, t_steps, labels = FALSE, ordered_result = TRUE) - 1
 
     # calculate the mean velocity per time step
     group_by(track_vt, t_step) |>

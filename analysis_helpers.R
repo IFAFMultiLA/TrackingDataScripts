@@ -16,6 +16,8 @@ library(patchwork)
 
 theme_set(theme_bw())  # set default theme
 
+# ----- data preparation helper functions -----
+
 # Get start date, end date and duration for each tracking session in `tracking_data`.
 tracking_sess_times <- function(tracking_data) {
     distinct(tracking_data, track_sess_id, track_sess_start, track_sess_end) |>
@@ -146,6 +148,9 @@ mouse_tracks_features <- function(mouse_tracks_data) {
         ungroup()
 }
 
+# ----- plotting functions -----
+
+# Plot tracking session durations given in `track_sess_times` (as returned from `tracking_sess_times()`).
 plot_tracking_sess_durations <- function(track_sess_times) {
     ggplot(track_sess_times, aes(y = ordered(track_sess_id))) +
         geom_linerange(aes(xmin = track_sess_start, xmax = track_sess_end)) +
@@ -154,6 +159,8 @@ plot_tracking_sess_durations <- function(track_sess_times) {
         labs(title = "Tracking session start and end times", x = "Date", y = "Tracking session ID")
 }
 
+# Plot tracking session durations as histogram given by `track_sess_times` (as returned from `tracking_sess_times()`).
+# Arguments in `...` are passed to `geom_histogram()`.
 plot_tracking_sess_durations_hist <- function(track_sess_times, ...) {
     durations_h <- track_sess_times$duration |> as.double(units = "hours")
     ggplot(data.frame(duration_hours = durations_h), aes(duration_hours)) +
@@ -161,6 +168,8 @@ plot_tracking_sess_durations_hist <- function(track_sess_times, ...) {
         labs(title = "Histogram of tracking session durations", x = "Duration in hours", y = "frequency")
 }
 
+# Make bar plot of event type counts in `tracking_data` on log10 scale. `tracking_data` is data as prepared in
+# `prepare.R`.
 plot_event_type_counts <- function(tracking_data) {
     type_counts <- count(tracking_data, type)
     p <- ggplot(type_counts, aes(x = type, y = n)) +
@@ -170,6 +179,8 @@ plot_event_type_counts <- function(tracking_data) {
     list(plot = p, table = type_counts)
 }
 
+# Make bar plot of event type counts *per tracking session* on log10 scale. `tracking_data` is data as prepared in
+# `prepare.R`.
 plot_event_type_counts_per_tracking_sess <- function(tracking_data) {
     type_counts <- count(tracking_data, track_sess_id, type)
     p <- ggplot(type_counts, aes(x = type, y = n)) +
@@ -181,6 +192,7 @@ plot_event_type_counts_per_tracking_sess <- function(tracking_data) {
     list(plot = p, table = type_counts)
 }
 
+# Plot proportion of correct answers per question. `quest_data` is data as returned from `question_submit_data()`.
 plot_question_prop_correct <- function(quest_data) {
     prop_per_question <- group_by(quest_data, ex_label) |>
         summarise(n = n(),
@@ -196,6 +208,7 @@ plot_question_prop_correct <- function(quest_data) {
     list(plot = p, table = prop_per_question)
 }
 
+# Plot proportion of correct answers per coding exercise `ex_data` is data as returned from `exercise_result_data()`.
 plot_exercise_prop_correct <- function(ex_data) {
     prop_per_question <- group_by(ex_data, ex_label) |>
         summarise(n = n(),
@@ -211,6 +224,8 @@ plot_exercise_prop_correct <- function(ex_data) {
     list(plot = p, table = prop_per_question)
 }
 
+# Plot number of tries per question as box plot. `quiz_tries` is data as returned from
+# `question_or_exercise_submit_tries()`.
 plot_question_n_tries <- function(quiz_tries) {
     ggplot(quiz_tries, aes(y = ex_label, x = try)) +
         geom_boxplot() +
@@ -219,6 +234,8 @@ plot_question_n_tries <- function(quiz_tries) {
         labs(title = "Number of tries per question", y = "question label", x = "number of tries")
 }
 
+# Plot number of tries per coding exercise as box plot. `ex_tries` is data as returned from
+# `question_or_exercise_submit_tries()`.
 plot_exercise_n_tries <- function(ex_tries) {
     ggplot(ex_tries, aes(y = ex_label, x = try)) +
         geom_boxplot() +
@@ -227,6 +244,8 @@ plot_exercise_n_tries <- function(ex_tries) {
         labs(title = "Number of tries per exercise", y = "exercise label", x = "number of tries")
 }
 
+# Plot mouse tracks for a single chapter view `chapt_change_number`. `mouse_tracks_data` is data as returned from
+# `mouse_tracks_for_tracking_sess()` but filtered for a specific tracking session.
 plot_mouse_tracks_for_chapter <- function(chapt_change_number, mouse_tracks_data,
                                           x_limits = c(0, 1),
                                           y_limits= c(1, 0)) {
@@ -249,6 +268,9 @@ plot_mouse_tracks_for_chapter <- function(chapt_change_number, mouse_tracks_data
         theme_minimal()
 }
 
+# Plot mouse tracks for a single tracking session identified by `track_sess_id`.
+# `mouse_tracks_data` is data as returned from `mouse_tracks_for_tracking_sess()`. `form_factor` is the device form
+# factor of the device used in the tracking session (to be displayed in the plot title).
 plot_mouse_tracks_for_tracking_session <- function(mouse_tracks_data, track_sess_id, form_factor,
                                                    x_limits = c(0, 1),
                                                    y_limits= c(1, 0)) {
@@ -259,6 +281,8 @@ plot_mouse_tracks_for_tracking_session <- function(mouse_tracks_data, track_sess
         plot_annotation(title = sprintf("Tracking session #%d (%s)", track_sess_id, form_factor))
 }
 
+# Plot proportion of correct answers/submissions per try. `prop_correct_per_try` is data as returned from
+# `prop_correct_in_ith_try()`. `title` is plot title.
 plot_prop_correct_per_try <- function(prop_correct_per_try, title) {
     ggplot(prop_correct_per_try, aes(x = try, y = prop_correct, color = ex_label)) +
         geom_line() +
@@ -268,6 +292,13 @@ plot_prop_correct_per_try <- function(prop_correct_per_try, title) {
         labs(title = title, x = "Try", y = "Proportion of correct submissions")
 }
 
+# Plot heatmap of mouse velocities with tracking sessions on y-axis and time steps on x-axis.
+# `tracks_features_per_track_sess` is a dataframe with the following variables:
+#
+# - `t_step`: time step
+# - `track_sess_id`: tracking session ID
+# - `form_factor`: device form factor
+# - `mean_t_step_V`: mean velocity in pixels per sec. for each time step
 plot_mouse_velocity_heatmap <- function(tracks_features_per_track_sess) {
     ggplot(tracks_features_per_track_sess, aes(x = t_step,
                                                y = as.factor(sprintf("%d (%s)", track_sess_id, form_factor)))) +
@@ -277,6 +308,3 @@ plot_mouse_velocity_heatmap <- function(tracks_features_per_track_sess) {
              x = "Minute after tracking session start",
              y = "Tracking session ID")
 }
-
-
-

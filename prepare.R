@@ -1,3 +1,12 @@
+# Data preparation script.
+#
+# Transforms the raw tracking data for all application sessions given in folder `data/raw` to a dataframes that can
+# be used for analyses. The output dataframes will be stored under `data/prepared`.
+#
+# Author: Markus Konrad <markus.konrad@htw-berlin.de>
+# Date: Nov./Dec. 2023
+#
+
 options(digits.secs = 4)
 
 library(dplyr)
@@ -102,7 +111,7 @@ extract_other_tracking_data <- function(row, row_index) {
 
 
 # function to parse a single mouse tracking frame passed as list `frame` as collected by mus.js;
-# returns a dataframe with a single row for the row
+# returns a dataframe with a single row of parsed data
 parse_mousetracking_frame <- function(frame) {
     frame <- sapply(frame, function(x) { ifelse(is.null(x), NA_character_, x) })
 
@@ -232,8 +241,7 @@ extract_mousetracking_data <- function(tracking_sess_data, tracking_sess_id) {
 }
 
 
-# function to load CSVs for data from a single application session
-
+# function to load CSVs for data from a single application session identified by `app_sess_id`
 load_app_sess_data <- function(app_sess_id) {
     datadir <- paste0("data/raw/", app_sess_id)
     sess <- read.csv(paste0(datadir, '/tracking_sessions.csv')) |>
@@ -243,6 +251,7 @@ load_app_sess_data <- function(app_sess_id) {
     # counts per event type
     print(table(events$event_type))
 
+    # generate device information from JSON in `track_sess_device_info`
     sess_device_info <- bind_rows(lapply(sess$track_sess_device_info, function(jsonstr) {
         res <- data.frame(
             user_agent = NA_character_,

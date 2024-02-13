@@ -1,6 +1,12 @@
 # R scripts for preparing and analyzing data collected with the MultiLA web API
 
-Markus Konrad [markus.konrad\@htw-berlin.de](mailto:markus.konrad@htw-berlin.de){.email}, January 2024
+Markus Konrad <markus.konrad@htw-berlin.de>, January 2024
+
+
+## Installation
+
+- install [renv](https://rstudio.github.io/renv/index.html) if you haven't yet
+- then install all R dependencies via `renv::restore()`
 
 ## Data preparation
 

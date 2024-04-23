@@ -110,6 +110,10 @@ mouse_tracks_for_tracking_sess <- function(tracking_data, tracking_sess_id) {
     form_factor <- unique(sess_data$form_factor)
     stopifnot(length(form_factor) == 1)
 
+    #substitute NAs with zeros in content_scroll_x/y (in case of no scroll it is filled with NAs)
+    sess_data$content_scroll_x[is.na(sess_data$content_scroll_x)]<-0
+    sess_data$content_scroll_y[is.na(sess_data$content_scroll_y)]<-0
+
     # generate the mouse tracks data: filter for the mouse-related events; group by chapter changes; set the content
     # bounds for the current chapter view; set the time as time since the start of the current chapter view;
     # calculate the mouse coordinates as normalized coordinates relative to the content bounds so they are in

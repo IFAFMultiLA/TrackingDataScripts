@@ -423,7 +423,7 @@ load_app_sess_data <- function(app_sess_id) {
 for (app_sess_id in list.dirs("data/raw", full.names = FALSE, recursive = FALSE)) {
     dir <- file.path("data", "prepared") 
     if (!dir.exists(dir)) dir.create(dir)
-    outputfile <- paste0(dir, app_sess_id, "_tracking_data.rds")
+    outputfile <- paste0(dir, "/", app_sess_id, "_tracking_data.rds")
 
     if (file.exists(outputfile)) {
         print(paste("prepared app session data already exists for app session", app_sess_id, "– skipping"))

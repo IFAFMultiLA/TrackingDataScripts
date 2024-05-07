@@ -23,7 +23,12 @@ FILTER_START_DATE <- as.POSIXlt("2023-11-06")
 # function to extract data not related to mouse tracking; parses the JSON string of each `event_value` in a given
 # dataframe `row` and returns a dataframe with a single row of parsed data
 extract_other_tracking_data <- function(row, row_index) {
-    v <- fromJSON(row$event_value, simplifyVector = FALSE)
+    if (is.null(row$event_value) || trimws(row$event_value) == "") {
+        v <- list()
+    } else {
+        v <- fromJSON(row$event_value, simplifyVector = FALSE)
+    }
+
     res <- data.frame(
         type = row$event_type,         # one of "chapter", "device_info_update", "input_change", "ex_result",
                                        # "ex_submit", "question_submit"
@@ -102,7 +107,14 @@ extract_other_tracking_data <- function(row, row_index) {
         } else {
             res$value <- v$answer
         }
-    } else {
+    } else if (row$event_type == "visibility_change") {
+        res$value <- v$state
+    } else if (row$event_type == "summary_shown") {
+        res$value <- "summary_shown"
+    } else if (row$event_type == "summary_topic_added") {
+        res$css <- paste0('#', v$id)
+        res$value <- v$key
+    }  else {
         warning(paste("unknown event type:", row$event_type))
     }
 

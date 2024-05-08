@@ -18,6 +18,34 @@ theme_set(theme_bw())  # set default theme
 
 # ----- data preparation helper functions -----
 
+# Load all tracking data from several application sessions identified in vector `app_sessions`. Optionally assign
+# each application session to a group passed via `groups`. If given, `groups` must has the same length as
+# `app_sessions`.
+load_app_sessions_tracking_data <- function(app_sessions, groups = NULL) {
+    stopifnot(is.null(groups) || length(app_sessions) == length(groups))
+
+    tracking_data <- lapply(app_sessions, function(sess) {
+        sess_data <- readRDS(sprintf("data/prepared/%s_tracking_data.rds", sess)) |>
+            mutate(app_session = sess)
+
+        if (!is.null(groups)) {
+            sess_data <- mutate(sess_data, group = groups[which(app_sessions == sess)])
+        }
+
+        sess_data
+    }) |>
+        bind_rows() |>
+        mutate(app_session = as.factor(app_session))
+
+
+    if (is.null(groups)) {
+        select(tracking_data, app_session, everything())
+    } else {
+        mutate(tracking_data, group = as.factor(group)) |>
+            select(app_session, group, everything())
+    }
+}
+
 # Get start date, end date and duration for each tracking session in `tracking_data`.
 tracking_sess_times <- function(tracking_data) {
     distinct(tracking_data, track_sess_id, track_sess_start, track_sess_end) |>
@@ -29,6 +57,22 @@ tracking_sess_times <- function(tracking_data) {
 question_submit_data <- function(tracking_data) {
     filter(tracking_data, type == "question_submit") |>
         select(track_sess_id, event_time, ex_label, ex_correct, value)
+}
+
+# Get all survey data from `tracking_data` as wide table with answers in columns per user and tracking session ID.
+survey_data <- function(tracking_data) {
+    all_numeric_or_NA <- function (x) {
+        all(is.na(x) | grepl("^[-]{0,1}[0-9]{0,}.{0,1}[0-9]{1,}$", x))
+    }
+
+    filter(tracking_data, type == "question_submit", !is.na(ex_label)) |>
+        mutate(ex_label = as.character(ex_label)) |>
+        filter(startsWith(ex_label, 'survey_')) |>
+        select(app_session, group, user_app_sess_code, track_sess_id, ex_label, value) |>
+        mutate(item = substr(ex_label, nchar('survey_') + 1, nchar(ex_label))) |>
+        select(-ex_label) |>
+        pivot_wider(names_from = item) |>
+        mutate(across(where(all_numeric_or_NA), as.numeric))
 }
 
 # Get all tracking data related to code exercises in `tracking_data`.

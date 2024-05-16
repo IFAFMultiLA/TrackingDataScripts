@@ -21,14 +21,16 @@ theme_set(theme_bw())  # set default theme
 # Load all tracking data from several application sessions identified in vector `app_sessions`. Optionally assign
 # each application session to a group passed via `groups`. If given, `groups` must has the same length as
 # `app_sessions`.
-load_app_sessions_tracking_data <- function(app_sessions, groups = NULL) {
+load_app_sessions_tracking_data <- function(app_sessions, groups = NULL, shorten_user_code = TRUE) {
     stopifnot(is.null(groups) || length(app_sessions) == length(groups))
 
     tracking_data <- lapply(app_sessions, function(sess) {
         sess_data <- readRDS(sprintf("data/prepared/%s_tracking_data.rds", sess)) |>
             mutate(app_session = sess)
 
-        if (!is.null(groups)) {
+        if (is.null(groups)) {
+            sess_data <- mutate(sess_data, group = "")
+        } else {
             sess_data <- mutate(sess_data, group = groups[which(app_sessions == sess)])
         }
 
@@ -38,25 +40,31 @@ load_app_sessions_tracking_data <- function(app_sessions, groups = NULL) {
         mutate(app_session = as.factor(app_session))
 
 
-    if (is.null(groups)) {
-        select(tracking_data, app_session, everything())
+    if (shorten_user_code) {
+        tracking_data$user_code <- substr(tracking_data$user_app_sess_code, 0, 16)
+
+        stopifnot(nrow(distinct(tracking_data, user_app_sess_code)) == nrow(distinct(tracking_data, user_code)))
     } else {
-        mutate(tracking_data, group = as.factor(group)) |>
-            select(app_session, group, everything())
+        tracking_data$user_code <- tracking_data$user_app_sess_code
     }
+
+
+    mutate(tracking_data, group = as.factor(group)) |>
+        select(app_session, group, user_code, everything())
 }
 
 # Get start date, end date and duration for each tracking session in `tracking_data`.
 tracking_sess_times <- function(tracking_data) {
-    distinct(tracking_data, track_sess_id, track_sess_start, track_sess_end) |>
+    distinct(tracking_data, user_code, track_sess_id, track_sess_start, track_sess_end) |>
         arrange(track_sess_start) |>
         mutate(duration = track_sess_end - track_sess_start)
+
 }
 
 # Get all tracking data related to question submissions in `tracking_data`.
 question_submit_data <- function(tracking_data) {
-    filter(tracking_data, type == "question_submit") |>
-        select(track_sess_id, event_time, ex_label, ex_correct, value)
+    filter(tracking_data, type == "question_submit", !startsWith(as.character(ex_label), "survey_")) |>
+        select(user_code, group, event_time, ex_label, ex_correct, value)
 }
 
 # Get all survey data from `tracking_data` as wide table with answers in columns per user and tracking session ID.
@@ -89,8 +97,8 @@ exercise_result_data <- function(tracking_data) {
 # `question_submit_data()` or `exercise_result_data()`.
 question_or_exercise_submit_tries <- function(quest_or_ex_data) {
     select(quest_or_ex_data, -value) |>
-        group_by(track_sess_id, ex_label) |>    # calculate per tracking session and exercise
-        arrange(track_sess_id, ex_label, event_time) |>
+        group_by(user_code, ex_label) |>    # calculate per tracking session and exercise
+        arrange(user_code, ex_label, event_time) |>
         mutate(try = row_number()) |>           # current try equals the row number after sorting by time
         filter(row_number() == n()) |>          # select only the last row per group to get the final try count
         ungroup()
@@ -101,7 +109,7 @@ question_or_exercise_submit_tries <- function(quest_or_ex_data) {
 prop_correct_in_ith_try <- function(quest_or_ex_data) {
     # get the maximum number of tries in total
     max_tries <- select(quest_or_ex_data, -value) |>
-        group_by(track_sess_id, ex_label) |>
+        group_by(user_code, ex_label) |>
         count() |>
         ungroup() |>
         pull(n) |>
@@ -110,8 +118,8 @@ prop_correct_in_ith_try <- function(quest_or_ex_data) {
     # for each number of tries in range [1, `max_tries`], calculate the proportion of correct answers per exercise
     lapply(1:max_tries, function(which_try) {
         select(quest_or_ex_data, -value) |>
-            group_by(track_sess_id, ex_label) |>                # for each exercise in each tracking session ...
-            arrange(track_sess_id, ex_label, event_time) |>
+            group_by(user_code, ex_label) |>                # for each exercise in each tracking session ...
+            arrange(user_code, ex_label, event_time) |>
             mutate(try = row_number(), max_try = max(try)) |>   # ... get each try and the overall number of tries and
             filter(try == min(max_try, which_try)) |>      # ... filter for the current try or the last try as fallback;
             ungroup() |>
@@ -199,12 +207,20 @@ mouse_tracks_features <- function(mouse_tracks_data) {
 # ----- plotting functions -----
 
 # Plot tracking session durations given in `track_sess_times` (as returned from `tracking_sess_times()`).
-plot_tracking_sess_durations <- function(track_sess_times) {
-    ggplot(track_sess_times, aes(y = ordered(track_sess_id))) +
-        geom_linerange(aes(xmin = track_sess_start, xmax = track_sess_end)) +
-        geom_point(aes(x = track_sess_start)) +
-        geom_point(aes(x = track_sess_end)) +
-        labs(title = "Tracking session start and end times", x = "Date", y = "Tracking session ID")
+plot_tracking_sess_durations <- function(track_sess_times, by_user_code = FALSE) {
+    if (by_user_code) {
+        ggplot(track_sess_times, aes(y = user_code)) +
+            geom_linerange(aes(xmin = track_sess_start, xmax = track_sess_end), alpha = 0.5) +
+            geom_point(aes(x = track_sess_start), alpha = 0.5) +
+            geom_point(aes(x = track_sess_end), alpha = 0.5) +
+            labs(title = "Tracking session start and end times", x = "Date", y = "User ID")
+    } else {
+        ggplot(track_sess_times, aes(y = ordered(track_sess_id), color = user_code)) +
+            geom_linerange(aes(xmin = track_sess_start, xmax = track_sess_end)) +
+            geom_point(aes(x = track_sess_start)) +
+            geom_point(aes(x = track_sess_end)) +
+            labs(title = "Tracking session start and end times", x = "Date", y = "Tracking session ID")
+    }
 }
 
 # Plot tracking session durations as histogram given by `track_sess_times` (as returned from `tracking_sess_times()`).
@@ -223,7 +239,8 @@ plot_event_type_counts <- function(tracking_data) {
     p <- ggplot(type_counts, aes(x = type, y = n)) +
         geom_col() +
         scale_y_log10() +
-        labs(title = "Number of events per type", x = "event type", y = "frequency on log10 scale")
+        labs(title = "Number of events per type", x = "event type", y = "frequency on log10 scale") +
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
     list(plot = p, table = type_counts)
 }
 
@@ -242,17 +259,45 @@ plot_event_type_counts_per_tracking_sess <- function(tracking_data) {
 
 # Plot proportion of correct answers per question. `quest_data` is data as returned from `question_submit_data()`.
 plot_question_prop_correct <- function(quest_data) {
-    prop_per_question <- group_by(quest_data, ex_label) |>
-        summarise(n = n(),
-                  prop_correct = mean(ex_correct),
-                  sd_correct = sqrt(prop_correct*(1-prop_correct)/n))
-    p <- ggplot(prop_per_question, aes(y = ex_label)) +
+    grp_compare <- length(levels(quest_data$group)) > 1
+
+    if (grp_compare) {
+        d <- group_by(quest_data, group, ex_label)
+    } else {
+        d <- group_by(quest_data, ex_label)
+    }
+
+    prop_per_question <- summarise(d,
+                                   n = n(),
+                                   prop_correct = mean(ex_correct),
+                                   sd_correct = sqrt(prop_correct*(1-prop_correct)/n)) |>
+        ungroup()
+
+    if(grp_compare) {
+        prop_per_question <- group_by(prop_per_question, group) |>
+            arrange(ex_label) |>
+            mutate(ex_label_pos = 1:n()) |>
+            ungroup() |>
+            mutate(ex_label_pos = ex_label_pos + (as.integer(group) * 2 - 3) * 0.12)
+
+        mapping <- aes(y = ex_label_pos, color = group)
+    } else {
+        mapping <- aes(y = ex_label)
+    }
+
+    p <- ggplot(prop_per_question, mapping) +
         geom_linerange(aes(xmin = prop_correct-sd_correct, xmax = prop_correct+sd_correct)) +
         geom_point(aes(x = prop_correct)) +
-        scale_y_discrete(limits = rev) +
+        geom_text(aes(x = prop_correct, label = paste("n =", n)), nudge_x = 0.05, nudge_y = 0.15, size = 3) +
         labs(title = "Proportion of correct answers per question",
              y = "question label",
              x = "proportion with standard deviations")
+
+    if (grp_compare) {
+        lbls <- sort(unique(as.character(prop_per_question$ex_label)))
+        p <- p + scale_y_continuous(breaks = 1:length(lbls), labels = lbls)
+    }
+
     list(plot = p, table = prop_per_question)
 }
 
@@ -275,11 +320,58 @@ plot_exercise_prop_correct <- function(ex_data) {
 # Plot number of tries per question as box plot. `quiz_tries` is data as returned from
 # `question_or_exercise_submit_tries()`.
 plot_question_n_tries <- function(quiz_tries) {
-    ggplot(quiz_tries, aes(y = ex_label, x = try)) +
-        geom_boxplot() +
-        geom_jitter(height = 0.25) +
-        scale_y_discrete(limits = rev) +
-        labs(title = "Number of tries per question", y = "question label", x = "number of tries")
+    grp_compare <- length(levels(quiz_tries$group)) > 1
+
+    if (grp_compare) {
+        d <- group_by(quiz_tries, group, ex_label)
+    } else {
+        d <- group_by(quiz_tries, ex_label)
+    }
+
+    n_tries <- summarise(d,
+                         n = n(),
+                         median_tries = median(try),
+                         tries_lwr = quantile(try, 0.25),
+                         tries_upr = quantile(try, 0.75)) |>
+        ungroup()
+
+    if(grp_compare) {
+        n_tries <- group_by(n_tries, group) |>
+            arrange(ex_label) |>
+            mutate(ex_label_pos = 1:n()) |>
+            ungroup() |>
+            mutate(ex_label_pos = ex_label_pos + (as.integer(group) * 2 - 3) * 0.12)
+
+        mapping <- aes(y = ex_label_pos, color = group)
+    } else {
+        mapping <- aes(y = ex_label)
+    }
+
+    p <- ggplot(n_tries, mapping) +
+        geom_linerange(aes(xmin = tries_lwr, xmax = tries_upr)) +
+        geom_point(aes(x = median_tries)) +
+        geom_text(aes(x = median_tries, label = paste("n =", n)), nudge_x = 0.05, nudge_y = 0.15, size = 3) +
+        labs(title = "Number of tries per question",
+             y = "question label",
+             x = "25th, 50th and 75th percentile")
+
+    if (grp_compare) {
+        lbls <- sort(unique(as.character(n_tries$ex_label)))
+        p <- p + scale_y_continuous(breaks = 1:length(lbls), labels = lbls)
+    }
+
+    list(plot = p, table = n_tries)
+}
+
+# Plot the proportion of correct answers per question after the last try
+plot_prop_correct_after_last_try <- function(quiz_tries) {
+    group_by(quiz_tries, group, ex_label) |>
+        summarise(prop_correct = mean(ex_correct)) |>
+        ggplot(aes(x = ex_label, y = prop_correct, fill = group)) +
+            geom_col(position = position_dodge()) +
+            labs(title = "Proportion of correct answers after the last try",
+                 x = "question label", y = "proportion") +
+            theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 }
 
 # Plot number of tries per coding exercise as box plot. `ex_tries` is data as returned from

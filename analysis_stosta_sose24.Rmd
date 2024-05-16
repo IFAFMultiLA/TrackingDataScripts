@@ -1,0 +1,189 @@
+---
+title: "Data analysis *Testgenauigkeit Bayes* from exercise session *Stochastik und ind. Statistik* (Master Wirtschaftsinformatik) / May 15 2024"
+author: "Markus Konrad"
+date: "2024-05-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Preparation
+
+### Load data, helper functions
+
+```{r, message=FALSE, warning=FALSE}
+source("analysis_helpers.R")
+
+tracking_data <- load_app_sessions_tracking_data(c("36263541b9", "e47a7d46bf"), c("treat", "ctrl"))
+```
+
+```{r}
+track_sess_times <- tracking_sess_times(tracking_data)
+
+plot_tracking_sess_durations(track_sess_times)
+```
+
+### Limit tracking session events to exercise time frame
+
+```{r}
+starttime <- strptime("2024-05-15 13:15", "%Y-%m-%d %H:%M")    # exercise start - 30 min.
+endtime <- strptime("2024-05-15 17:30", "%Y-%m-%d %H:%M")      # exercise end + 30 min.    
+
+tracking_data <- filter(tracking_data, event_time >= starttime, event_time <= endtime) |>
+    group_by(track_sess_id) |>
+    mutate(track_sess_end = min(track_sess_end, max(event_time))) |>
+    ungroup() |>
+    filter(track_sess_start >= starttime, track_sess_end <= endtime)
+
+track_sess_times <- tracking_sess_times(tracking_data)
+
+plot_tracking_sess_durations(track_sess_times)
+```
+
+```{r}
+plot_tracking_sess_durations(track_sess_times, by_user_code = TRUE)
+```
+
+- first user: 2 tabs?
+- short user session in middle: lab computer problem
+- short user sessions at the end: restart at the end to show something to the instructor
+- dismiss short sessions?
+- merge 6ab33... and 9cd0...?
+- merge f93a... two sessions?
+
+```{r}
+plot_tracking_sess_durations_hist(track_sess_times, binwidth = 0.25)
+```
+
+- long interaction time
+
+```{r}
+median(track_sess_times$duration) |> as.double(units = "mins")
+```
+
+### Number of observations, unique users and event types
+
+- many observations
+
+```{r}
+dim(tracking_data)
+```
+
+- number of unique users:
+
+```{r}
+length(unique(tracking_data$user_code))
+```
+
+- treatment and control assignments:
+
+```{r}
+distinct(tracking_data, user_code, group) |> count(group)
+```
+
+
+- all used a desktop PC
+
+```{r}
+group_by(tracking_data, track_sess_id) |>
+    distinct(form_factor) |>
+    ungroup() |>
+    count(form_factor)
+```
+
+
+- number of events per event type:
+
+```{r}
+res <- plot_event_type_counts(tracking_data)
+res$plot
+```
+
+
+```{r}
+res$table
+```
+
+- number of events per event type in each tracking session:
+
+```{r, fig.width=9, fig.height=9}
+res <- plot_event_type_counts_per_tracking_sess(tracking_data)
+res$plot
+```
+
+
+### Question and code exercise submissions
+
+- proportion of correct answers per question:
+
+```{r, fig.width=6, fig.height=8}
+quest_data <- question_submit_data(tracking_data)
+res <- plot_question_prop_correct(quest_data)
+res$plot
+```
+
+- number of tries per question:
+
+```{r}
+quiz_tries <- question_or_exercise_submit_tries(quest_data)
+```
+
+```{r, fig.width=6, fig.height=8}
+plot_question_n_tries(quiz_tries)$plot
+```
+
+- interestingly, each question was finally answered correctly – no one gave up in between:
+
+```{r}
+plot_prop_correct_after_last_try(quiz_tries)
+```
+
+```{r}
+quiz_prop_correct_per_try <- prop_correct_in_ith_try(quest_data)
+plot_prop_correct_per_try(quiz_prop_correct_per_try, "Proportion of correct quiz answers per number of tries")
+```
+
+
+- only a few coding exercises were tried, and even fewer succeeded
+
+```{r}
+ex_data <- exercise_result_data(tracking_data)
+ex_tries <- question_or_exercise_submit_tries(ex_data)
+group_by(ex_tries, ex_label) |>
+    summarise(n = n(),
+              prop_correct = mean(ex_correct))
+```
+
+```{r}
+plot_exercise_n_tries(ex_tries)
+```
+
+
+- all in all less then a third of the exercise were answered correctly in the end, means most students gave up
+
+```{r}
+mean(ex_tries$ex_correct)
+```
+
+```{r}
+ex_prop_correct_per_try <- prop_correct_in_ith_try(ex_data)
+plot_prop_correct_per_try(ex_prop_correct_per_try, "Proportion of correct code submissions per number of tries")
+```
+
+- (on try 6, someone in tracking session #185 made a correct submission and then regressed to a wrong submission afterwards)
+
+
+- often, the submitted code is not correct R code
+- furthermore, students don't understand that the last output is the result but assume that the have to use
+  `print(...)` to return the result
+
+```{r}
+filter(ex_data, !ex_correct) |>
+    pull(value) |>
+    trimws() |>
+    paste(collapse = "\n---\n") |>
+    cat()
+```
+

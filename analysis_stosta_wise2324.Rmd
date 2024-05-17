@@ -46,6 +46,10 @@ plot_tracking_sess_durations(track_sess_times)
 ```
 
 ```{r}
+plot_tracking_sess_durations(track_sess_times, by_user_code = TRUE)
+```
+
+```{r}
 plot_tracking_sess_durations_hist(track_sess_times, binwidth = 0.25)
 ```
 

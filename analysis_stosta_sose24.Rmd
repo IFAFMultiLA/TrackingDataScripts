@@ -28,14 +28,18 @@ plot_tracking_sess_durations(track_sess_times)
 ### Limit tracking session events to exercise time frame
 
 ```{r}
-starttime <- strptime("2024-05-15 13:15", "%Y-%m-%d %H:%M")    # exercise start - 30 min.
-endtime <- strptime("2024-05-15 17:30", "%Y-%m-%d %H:%M")      # exercise end + 30 min.    
+# conversion to the right timezone is extremely important!
+# all times in `tracking_data` are in UTC (aka GMT)
+starttime <- as.POSIXct(strptime("2024-05-15 13:55", "%Y-%m-%d %H:%M"), tz  = "GMT")
+endtime <- as.POSIXct(strptime("2024-05-15 16:00", "%Y-%m-%d %H:%M"), tz  = "GMT")
+#attr(starttime, "tzone") <- "GMT"
+#attr(endtime, "tzone") <- "GMT"
 
 tracking_data <- filter(tracking_data, event_time >= starttime, event_time <= endtime) |>
     group_by(track_sess_id) |>
-    mutate(track_sess_end = min(track_sess_end, max(event_time))) |>
-    ungroup() |>
-    filter(track_sess_start >= starttime, track_sess_end <= endtime)
+    mutate(track_sess_start = min(track_sess_start, min(event_time)),
+           track_sess_end = min(track_sess_end, max(event_time))) |>
+    ungroup()
 
 track_sess_times <- tracking_sess_times(tracking_data)
 
@@ -52,6 +56,18 @@ plot_tracking_sess_durations(track_sess_times, by_user_code = TRUE)
 - dismiss short sessions?
 - merge 6ab33... and 9cd0...?
 - merge f93a... two sessions?
+
+
+```{r}
+tracking_data <- filter(tracking_data, !(user_code %in% c("13d48be01652b32e", "1e8e8090e4bc1355", "9cd0199df2050778")))
+track_sess_times <- tracking_sess_times(tracking_data)
+```
+
+
+```{r}
+plot_tracking_sess_durations(track_sess_times, by_user_code = TRUE)
+```
+
 
 ```{r}
 plot_tracking_sess_durations_hist(track_sess_times, binwidth = 0.25)

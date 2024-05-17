@@ -209,7 +209,7 @@ extract_mousetracking_data <- function(tracking_sess_data, tracking_sess_id) {
             # newer event data (since Nov. 28 2023) has a "startedAtISODate" value as time reference for the event
             # frame timestamps
             if (!is.null(event$startedAtISODate) && is.character(event$startedAtISODate)) {
-                frames_df$mouse_tracking_starttime <- as.POSIXct(gsub("T", " ", event$startedAtISODate))
+                frames_df$mouse_tracking_starttime <- as.POSIXct(gsub("T", " ", event$startedAtISODate), tz = "GMT")
             } else {
                 frames_df$mouse_tracking_starttime <- NA
             }
@@ -238,7 +238,8 @@ extract_mousetracking_data <- function(tracking_sess_data, tracking_sess_id) {
         inner_join(frames_per_event, by = "chunk_id") |>
         mutate(event_time = as.POSIXct(ifelse(is.na(mouse_tracking_starttime),
                                        mouse_event_start + timestamp/1000,
-                                       mouse_tracking_starttime + timestamp/1000))) |>
+                                       mouse_tracking_starttime + timestamp/1000),
+                                       tz = "GMT")) |>
         select(-c(chunk_id, timestamp, mouse_tracking_starttime)) |>
         arrange(event_time)
 
@@ -303,9 +304,10 @@ load_app_sess_data <- function(app_sess_id) {
     # join tracking session and event data by tracking session ID and filter for all but the "mouse" events
     nonmousedata <- left_join(sess, events, by = c('track_sess_id')) |>
         filter(event_type != "mouse") |>
-        mutate(track_sess_start = as.POSIXct(gsub("T", " ", track_sess_start)),
-               track_sess_end = as.POSIXct(gsub("T", " ", ifelse(track_sess_end == "", NA, track_sess_end))),
-               event_time = as.POSIXct(gsub("T", " ", event_time))) |>
+        mutate(track_sess_start = as.POSIXct(gsub("T", " ", track_sess_start), tz = "GMT"),
+               track_sess_end = as.POSIXct(gsub("T", " ", ifelse(track_sess_end == "", NA, track_sess_end)),
+                                           tz = "GMT"),
+               event_time = as.POSIXct(gsub("T", " ", event_time), tz = "GMT")) |>
         select(-app_sess_code) |>
         arrange(event_time) |>
         filter(track_sess_start >= FILTER_START_DATE, event_time >= FILTER_START_DATE)
@@ -326,9 +328,10 @@ load_app_sess_data <- function(app_sess_id) {
     # join tracking session and event data by tracking session ID and filter for only "mouse" events
     mousedata <- left_join(sess, events, by = c('track_sess_id')) |>
         filter(event_type == "mouse") |>
-        mutate(track_sess_start = as.POSIXct(gsub("T", " ", track_sess_start)),
-               track_sess_end = as.POSIXct(gsub("T", " ", ifelse(track_sess_end == "", NA, track_sess_end))),
-               event_time = as.POSIXct(gsub("T", " ", event_time))) |>
+        mutate(track_sess_start = as.POSIXct(gsub("T", " ", track_sess_start), tz = "GMT"),
+               track_sess_end = as.POSIXct(gsub("T", " ", ifelse(track_sess_end == "", NA, track_sess_end)),
+                                           tz = "GMT"),
+               event_time = as.POSIXct(gsub("T", " ", event_time), tz = "GMT")) |>
         select(-c(app_sess_code, event_type)) |>
         arrange(event_time) |>
         filter(track_sess_start >= FILTER_START_DATE, event_time >= FILTER_START_DATE)
@@ -351,6 +354,12 @@ load_app_sess_data <- function(app_sess_id) {
         group_modify(extract_mousetracking_data) |>
         arrange(event_time) |>    # individual events may be out of order otherwise
         ungroup()
+
+    if (min(mousetracking_complete$track_sess_start) > "2024-01-01" &&
+        max(mousetracking_complete$track_sess_start) < "2024-05-17") {
+        # fix an issue with wrong timezone in mouse tracking data before it was fixed in 2024-05-17
+        mousetracking_complete <- mutate(mousetracking_complete, event_time = event_time + 2*60*60)
+    }
 
     rm(mousedata)
 
@@ -376,7 +385,8 @@ load_app_sess_data <- function(app_sess_id) {
                contentscroll_width = ifelse(row_number() == 1, initial_contentscroll_width, NA_real_),
                contentscroll_height = ifelse(row_number() == 1, initial_contentscroll_height, NA_real_),
                track_sess_end = as.POSIXct(ifelse(is.na(track_sess_end) & row_number() == n(),   # last event is end of
-                                                  event_time, track_sess_end))) |>               # tracking session
+                                                  event_time, track_sess_end),                   # tracking session
+                                           tz = "GMT")) |>
         fill(track_sess_end, .direction = "up") |>
         ungroup() |>
         mutate(user_app_sess_code = as.factor(user_app_sess_code),
@@ -433,7 +443,7 @@ load_app_sess_data <- function(app_sess_id) {
 # ---- load data from all application sessions ----
 
 for (app_sess_id in list.dirs("data/raw", full.names = FALSE, recursive = FALSE)) {
-    dir <- file.path("data", "prepared") 
+    dir <- file.path("data", "prepared")
     if (!dir.exists(dir)) dir.create(dir)
     outputfile <- paste0(dir, "/", app_sess_id, "_tracking_data.rds")
 

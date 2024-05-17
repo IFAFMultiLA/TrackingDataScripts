@@ -450,3 +450,25 @@ plot_mouse_velocity_heatmap <- function(tracks_features_per_track_sess) {
              x = "Minute after tracking session start",
              y = "Tracking session ID")
 }
+
+# Make boxplots for all numerical survey items from survey data given by `survey`.
+plot_survey_numerical_items <- function(survey) {
+    numdata <- select(survey, -c(mehrere_tabs, kommentar)) |>
+        pivot_longer(schwierigkeit:zufriedenheit, names_to = "item") |>
+        filter(!is.na(value))
+
+    summdata <- group_by(numdata, group, item) |>
+        summarise(mean = mean(value), .groups = "keep") |>
+        pivot_wider(names_from = item, values_from = mean)
+
+    p <- ggplot(numdata, aes(x = value, y = item, color = group)) +
+        geom_boxplot(position = position_dodge2(padding = 0.3, reverse = TRUE), outliers = FALSE) +
+        geom_jitter(width = 0.1, height = 0.3, alpha = 0.25) +
+        scale_y_discrete(limits = rev) +
+        labs(title = "Survey results for likert-scale items",
+             x = "Score on likert-5-point scale",
+             y = "Item")
+
+    list(data = summdata, plot = p)
+}
+

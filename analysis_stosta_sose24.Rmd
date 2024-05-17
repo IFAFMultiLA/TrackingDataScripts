@@ -195,3 +195,41 @@ filter(ex_data, !ex_correct) |>
     cat()
 ```
 
+### Survey
+
+```{r}
+survey <- survey_data(tracking_data)
+
+plot_survey_numerical_items(survey)
+```
+
+```{r}
+multiple_tabs_data <- select(survey, -c(schwierigkeit:kommentar), mehrere_tabs) |>
+    mutate(mehrere_tabs = mehrere_tabs == "j") |>
+    group_by(group) |>
+    summarise(yes = sum(mehrere_tabs),
+              no = n() - yes,
+              prop = mean(mehrere_tabs),
+              se = sqrt(prop * (1-prop) / n()))
+multiple_tabs_data
+```
+
+```{r}
+ggplot(multiple_tabs_data, aes(y = group)) +
+    geom_pointrange(aes(xmin = prop - se, x = prop, xmax = prop + se)) +
+    scale_x_continuous(limits = c(0, 1)) +
+    scale_y_discrete(limits = rev) +
+    labs(title = "Proportion of users that opened several tabs according to the survey",
+         x = "Proportion and standard error",
+         y = "Group")
+```
+
+Suggestions for improvements:
+
+```{r}
+filter(survey, group == "ctrl", !is.na(kommentar)) |> pull(kommentar)
+```
+
+```{r}
+filter(survey, group == "treat", !is.na(kommentar)) |> pull(kommentar)
+```

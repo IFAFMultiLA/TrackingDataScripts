@@ -88,7 +88,7 @@ exercise_result_data <- function(tracking_data) {
     # in step 3, `ex_correct` is transformed so that exercises where there was no result submitted (i.e. NA) are counted
     # as "not correct"
     filter(tracking_data, type  == "ex_result") |>
-        select(track_sess_id, event_time, type, starts_with("ex_"), value) |>
+        select(group, user_code, event_time, type, starts_with("ex_"), value) |>
         mutate(ex_correct = ifelse(is.na(ex_correct), FALSE, ex_correct))
 }
 
@@ -109,7 +109,7 @@ question_or_exercise_submit_tries <- function(quest_or_ex_data) {
 prop_correct_in_ith_try <- function(quest_or_ex_data) {
     # get the maximum number of tries in total
     max_tries <- select(quest_or_ex_data, -value) |>
-        group_by(user_code, ex_label) |>
+        group_by(group, user_code, ex_label) |>
         count() |>
         ungroup() |>
         pull(n) |>
@@ -118,17 +118,17 @@ prop_correct_in_ith_try <- function(quest_or_ex_data) {
     # for each number of tries in range [1, `max_tries`], calculate the proportion of correct answers per exercise
     lapply(1:max_tries, function(which_try) {
         select(quest_or_ex_data, -value) |>
-            group_by(user_code, ex_label) |>                # for each exercise in each tracking session ...
-            arrange(user_code, ex_label, event_time) |>
+            group_by(group, user_code, ex_label) |>                # for each exercise in each tracking session ...
+            arrange(group, user_code, ex_label, event_time) |>
             mutate(try = row_number(), max_try = max(try)) |>   # ... get each try and the overall number of tries and
             filter(try == min(max_try, which_try)) |>      # ... filter for the current try or the last try as fallback;
             ungroup() |>
-            group_by(ex_label) |>                          # then calculate the proportion of correct answers for ...
-            summarise(prop_correct = mean(ex_correct)) |>  # ... each exercise
+            group_by(group, ex_label) |>                   # then calculate the proportion of correct answers for ...
+            summarise(prop_correct = mean(ex_correct), .groups = "keep") |>  # ... each exercise
             ungroup() |>
             mutate(try = which_try)
     }) |> bind_rows() |>                                   # concatenate to single dataframe
-        group_by(ex_label) |>
+        group_by(group, ex_label) |>
         mutate(lag_correct = lag(prop_correct)) |>         # keep only observations where prev. try was first try or
         filter(is.na(lag_correct) | lag_correct < 1) |>    # was not 100% correct, yet
         ungroup() |>
@@ -244,15 +244,15 @@ plot_event_type_counts <- function(tracking_data) {
     list(plot = p, table = type_counts)
 }
 
-# Make bar plot of event type counts *per tracking session* on log10 scale. `tracking_data` is data as prepared in
+# Make bar plot of event type counts *per user* on log10 scale. `tracking_data` is data as prepared in
 # `prepare.R`.
-plot_event_type_counts_per_tracking_sess <- function(tracking_data) {
-    type_counts <- count(tracking_data, track_sess_id, type)
+plot_event_type_counts_per_user <- function(tracking_data) {
+    type_counts <- count(tracking_data, user_code, type)
     p <- ggplot(type_counts, aes(x = type, y = n)) +
         geom_col() +
         scale_y_log10() +
         labs(title = "Number of events per type", x = "event type", y = "frequency on log10 scale") +
-        facet_wrap(vars(track_sess_id)) +
+        facet_wrap(vars(user_code)) +
         theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
     list(plot = p, table = type_counts)
 }
@@ -381,6 +381,7 @@ plot_exercise_n_tries <- function(ex_tries) {
         geom_boxplot() +
         geom_jitter(height = 0.25) +
         scale_y_discrete(limits = rev) +
+        facet_wrap(vars(group)) +
         labs(title = "Number of tries per exercise", y = "exercise label", x = "number of tries")
 }
 
@@ -429,6 +430,7 @@ plot_prop_correct_per_try <- function(prop_correct_per_try, title) {
         scale_x_continuous(breaks = 1:max(prop_correct_per_try$try)) +
         scale_y_continuous(limits = c(0, 1)) +
         scale_color_discrete(name = "Label") +
+        facet_wrap(vars(group)) +
         labs(title = title, x = "Try", y = "Proportion of correct submissions")
 }
 

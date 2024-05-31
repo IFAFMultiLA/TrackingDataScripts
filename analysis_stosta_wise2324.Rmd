@@ -31,8 +31,8 @@ plot_tracking_sess_durations(track_sess_times)
 ### Limit tracking session events to exercise time frame
 
 ```{r}
-starttime <- strptime("2023-11-15 13:15", "%Y-%m-%d %H:%M")    # exercise start - 30 min.
-endtime <- strptime("2023-11-15 17:30", "%Y-%m-%d %H:%M")      # exercise end + 30 min.    
+starttime <- ymd_hm("2023-11-15 13:15", tz = "CET")    # exercise start - 30 min.
+endtime <- ymd_hm("2023-11-15 17:30", tz = "CET")      # exercise end + 30 min.    
 
 tracking_data <- filter(tracking_data, event_time >= starttime, event_time <= endtime) |>
     group_by(track_sess_id) |>

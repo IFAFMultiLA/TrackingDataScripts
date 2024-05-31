@@ -12,6 +12,7 @@ library(bcpa)
 library(tidyr)
 library(ggplot2)
 library(patchwork)
+library(lubridate)
 
 
 theme_set(theme_bw())  # set default theme
@@ -258,11 +259,15 @@ plot_event_type_counts_per_user <- function(tracking_data) {
 }
 
 # Plot proportion of correct answers per question. `quest_data` is data as returned from `question_submit_data()`.
-plot_question_prop_correct <- function(quest_data) {
+plot_question_prop_correct <- function(quest_data, per_group = FALSE) {
     grp_compare <- length(levels(quest_data$group)) > 1
 
     if (grp_compare) {
-        d <- group_by(quest_data, group, ex_label)
+        if (per_group) {
+            d <- group_by(quest_data, group)
+        } else {
+            d <- group_by(quest_data, group, ex_label)
+        }
     } else {
         d <- group_by(quest_data, ex_label)
     }
@@ -274,13 +279,17 @@ plot_question_prop_correct <- function(quest_data) {
         ungroup()
 
     if(grp_compare) {
-        prop_per_question <- group_by(prop_per_question, group) |>
-            arrange(ex_label) |>
-            mutate(ex_label_pos = 1:n()) |>
-            ungroup() |>
-            mutate(ex_label_pos = ex_label_pos + (as.integer(group) * 2 - 3) * 0.12)
+        if (per_group) {
+            mapping <- aes(y = group, color = group)
+        } else {
+            prop_per_question <- group_by(prop_per_question, group) |>
+                arrange(ex_label) |>
+                mutate(ex_label_pos = 1:n()) |>
+                ungroup() |>
+                mutate(ex_label_pos = ex_label_pos + (as.integer(group) * 2 - 3) * 0.12)
 
-        mapping <- aes(y = ex_label_pos, color = group)
+            mapping <- aes(y = ex_label_pos, color = group)
+        }
     } else {
         mapping <- aes(y = ex_label)
     }
@@ -293,7 +302,7 @@ plot_question_prop_correct <- function(quest_data) {
              y = "question label",
              x = "proportion with standard deviations")
 
-    if (grp_compare) {
+    if (grp_compare && !per_group) {
         lbls <- sort(unique(as.character(prop_per_question$ex_label)))
         p <- p + scale_y_continuous(breaks = 1:length(lbls), labels = lbls)
     }
@@ -319,11 +328,15 @@ plot_exercise_prop_correct <- function(ex_data) {
 
 # Plot number of tries per question as box plot. `quiz_tries` is data as returned from
 # `question_or_exercise_submit_tries()`.
-plot_question_n_tries <- function(quiz_tries) {
+plot_question_n_tries <- function(quiz_tries, per_group = FALSE) {
     grp_compare <- length(levels(quiz_tries$group)) > 1
 
     if (grp_compare) {
-        d <- group_by(quiz_tries, group, ex_label)
+        if (per_group) {
+            d <- group_by(quiz_tries, group)
+        } else {
+            d <- group_by(quiz_tries, group, ex_label)
+        }
     } else {
         d <- group_by(quiz_tries, ex_label)
     }
@@ -336,13 +349,17 @@ plot_question_n_tries <- function(quiz_tries) {
         ungroup()
 
     if(grp_compare) {
-        n_tries <- group_by(n_tries, group) |>
-            arrange(ex_label) |>
-            mutate(ex_label_pos = 1:n()) |>
-            ungroup() |>
-            mutate(ex_label_pos = ex_label_pos + (as.integer(group) * 2 - 3) * 0.12)
+        if (per_group) {
+            mapping <- aes(y = group, color = group)
+        } else {
+            n_tries <- group_by(n_tries, group) |>
+                arrange(ex_label) |>
+                mutate(ex_label_pos = 1:n()) |>
+                ungroup() |>
+                mutate(ex_label_pos = ex_label_pos + (as.integer(group) * 2 - 3) * 0.12)
 
-        mapping <- aes(y = ex_label_pos, color = group)
+            mapping <- aes(y = ex_label_pos, color = group)
+        }
     } else {
         mapping <- aes(y = ex_label)
     }
@@ -355,7 +372,7 @@ plot_question_n_tries <- function(quiz_tries) {
              y = "question label",
              x = "25th, 50th and 75th percentile")
 
-    if (grp_compare) {
+    if (grp_compare && !per_group) {
         lbls <- sort(unique(as.character(n_tries$ex_label)))
         p <- p + scale_y_continuous(breaks = 1:length(lbls), labels = lbls)
     }

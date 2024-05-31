@@ -30,15 +30,12 @@ plot_tracking_sess_durations(track_sess_times)
 ```{r}
 # conversion to the right timezone is extremely important!
 # all times in `tracking_data` are in UTC (aka GMT)
-starttime <- as.POSIXct(strptime("2024-05-15 13:55", "%Y-%m-%d %H:%M"), tz  = "GMT")
-endtime <- as.POSIXct(strptime("2024-05-15 16:00", "%Y-%m-%d %H:%M"), tz  = "GMT")
-#attr(starttime, "tzone") <- "GMT"
-#attr(endtime, "tzone") <- "GMT"
+starttime <- ymd_hm("2024-05-15 11:55", tz = "UTC")
+endtime <- ymd_hm("2024-05-15 15:00", tz = "UTC")
 
-tracking_data <- filter(tracking_data, event_time >= starttime, event_time <= endtime) |>
+tracking_data <- filter(tracking_data, track_sess_start >= starttime, event_time >= starttime, event_time <= endtime) |>
     group_by(track_sess_id) |>
-    mutate(track_sess_start = min(track_sess_start, min(event_time)),
-           track_sess_end = min(track_sess_end, max(event_time))) |>
+    mutate(track_sess_end = min(track_sess_end, max(event_time))) |>
     ungroup()
 
 track_sess_times <- tracking_sess_times(tracking_data)
@@ -140,6 +137,12 @@ res <- plot_question_prop_correct(quest_data)
 res$plot
 ```
 
+```{r}
+res <- plot_question_prop_correct(quest_data, per_group = TRUE)
+res$plot
+```
+
+
 - number of tries per question:
 
 ```{r}
@@ -150,7 +153,10 @@ quiz_tries <- question_or_exercise_submit_tries(quest_data)
 plot_question_n_tries(quiz_tries)$plot
 ```
 
-- interestingly, each question was finally answered correctly – no one gave up in between:
+```{r}
+plot_question_n_tries(quiz_tries, per_group = TRUE)$plot
+```
+
 
 ```{r}
 plot_prop_correct_after_last_try(quiz_tries)

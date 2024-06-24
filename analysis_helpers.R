@@ -469,22 +469,48 @@ plot_mouse_velocity_heatmap <- function(tracks_features_per_track_sess) {
 }
 
 # Make boxplots for all numerical survey items from survey data given by `survey`.
-plot_survey_numerical_items <- function(survey) {
+plot_survey_numerical_items <- function(survey, per_group = TRUE, questions = NULL, scale_labels = NULL,
+                                        xlab = "score on 5-point Likert scale", ylab = NULL,
+                                        title = "Survey results") {
     numdata <- select(survey, -c(mehrere_tabs, kommentar)) |>
         pivot_longer(schwierigkeit:zufriedenheit, names_to = "item") |>
         filter(!is.na(value))
 
-    summdata <- group_by(numdata, group, item) |>
-        summarise(mean = mean(value), .groups = "keep") |>
+    if (per_group) {
+        grouped_data <- group_by(numdata, group, item)
+        aes_mapping <- aes(x = value, y = item, color = group)
+    } else {
+        grouped_data <- group_by(numdata, group, item)
+        aes_mapping <- aes(x = value, y = item)
+    }
+
+    summdata <- summarise(grouped_data, mean = mean(value), .groups = "keep") |>
         pivot_wider(names_from = item, values_from = mean)
 
-    p <- ggplot(numdata, aes(x = value, y = item, color = group)) +
+    p <- ggplot(numdata, aes_mapping) +
         geom_boxplot(position = position_dodge2(padding = 0.3, reverse = TRUE), outliers = FALSE) +
         geom_jitter(width = 0.1, height = 0.3, alpha = 0.25) +
-        scale_y_discrete(limits = rev) +
-        labs(title = "Survey results for likert-scale items",
-             x = "Score on likert-5-point scale",
-             y = "Item")
+        labs(title = title,
+             x = xlab,
+             y = ylab)
+
+    if (!is.null(questions)) {
+        item_labels <- unlist(questions, use.names = FALSE)[order(names(questions))]
+        p <- p + scale_y_discrete(limits = rev, labels = rev(item_labels))
+    } else {
+        p <- p + scale_y_discrete(limits = rev)
+    }
+
+    if (!is.null(scale_labels)) {
+        scale_labels_vec <- unlist(scale_labels[order(names(scale_labels))], use.names = FALSE)
+        scale_left <- rev(scale_labels_vec[seq(1, length(scale_labels_vec), 2)])
+        scale_right <- rev(scale_labels_vec[seq(2, length(scale_labels_vec), 2)])
+        p <- p + annotate("label", x = 0, y = 1:length(scale_labels), label = scale_left, size = 2.5, hjust = 0) +
+            annotate("label", x = 6, y = 1:length(scale_labels), label = scale_right, size = 2.5, hjust = 1) +
+            scale_x_continuous(limits = c(0, 6), breaks = 1:5)
+    } else {
+        p <- p + scale_x_discrete(limits = 1:5)
+    }
 
     list(data = summdata, plot = p)
 }

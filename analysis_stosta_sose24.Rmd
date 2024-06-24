@@ -206,8 +206,37 @@ filter(ex_data, !ex_correct) |>
 ```{r}
 survey <- survey_data(tracking_data)
 
-plot_survey_numerical_items(survey)
+survey_questions <- list(
+    schwierigkeit = "Die Lernanwendung ist inhaltlich ...",
+    praxisbeispiel = "Medizinische Tests als Praxisbeispiel\nfür den Satz von Bayes finde ich ...",
+    verwendung_uebung = "Solche Lernanwendungen sollten\nin der Übung ...",
+    verwendung_zuhause = "Ich würde solche Lernanwendungen\nzum Selbstlernen zu Hause ...",
+    bedienung = "Das Layout und die Bedienung\nder Lernanwendung sind  ...",
+    interakt_grafik = "Die interaktive Grafik\nfand ich  ...",
+    zusammenfassung = "Ich habe die Zusammenfassungsleiste\nauf der rechten Seite  ...",
+    umfang = "Vom Umfang her ist diese\nLernanwendung ...",
+    zufriedenheit = "Die Lernanwendung finde\nich insgesamt ..."
+    
+)
+survey_scale <- list(
+    schwierigkeit = c("schwer", "leicht"),
+    praxisbeispiel = c("uninteressant", "interessant"),
+    verwendung_uebung = c("nie verwendet werden", "immer verwendet werden"),
+    verwendung_zuhause = c("nie verwenden", "ständig verwenden"),
+    bedienung = c("schwer verständlich", "leicht verständlich"),
+    interakt_grafik = c("nicht hilfreich", "hilfreich"),
+    zusammenfassung = c("gar nicht genutzt", "ständig genutzt"),
+    umfang = c("zu kurz", "zu lang"),
+    zufriedenheit = c("schlecht", "gut")
+)
+
+plot_survey_numerical_items(survey, per_group = FALSE, questions = survey_questions, scale_labels = survey_scale)
 ```
+
+```{r}
+plot_survey_numerical_items(survey, questions = survey_questions, scale_labels = survey_scale)
+```
+
 
 ```{r}
 multiple_tabs_data <- select(survey, -c(schwierigkeit:kommentar), mehrere_tabs) |>

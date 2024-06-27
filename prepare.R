@@ -442,7 +442,8 @@ for (app_sess_id in list.dirs("data/raw", full.names = FALSE, recursive = FALSE)
         print(paste("prepared app session data already exists for app session", app_sess_id, "– skipping"))
     } else {
         print(paste("loading data for app session", app_sess_id))
-        final <- load_app_sess_data(app_sess_id)
+        final <- load_app_sess_data(app_sess_id) |>
+            select(-c(user_agent, client_ip))
 
         # save as RDS
         print(paste("storing prepared data to", outputfile))

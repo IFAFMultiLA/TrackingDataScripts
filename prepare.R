@@ -433,7 +433,7 @@ load_app_sess_data <- function(app_sess_id) {
 # ---- load data from all application sessions ----
 
 for (app_sess_id in list.dirs("data/raw", full.names = FALSE, recursive = FALSE)) {
-    dir <- file.path("data", "prepared") 
+    dir <- file.path("data", "prepared")
     if (!dir.exists(dir)) dir.create(dir)
     outputfile <- paste0(dir, "/", app_sess_id, "_tracking_data.rds")
 
@@ -441,7 +441,8 @@ for (app_sess_id in list.dirs("data/raw", full.names = FALSE, recursive = FALSE)
         print(paste("prepared app session data already exists for app session", app_sess_id, "– skipping"))
     } else {
         print(paste("loading data for app session", app_sess_id))
-        final <- load_app_sess_data(app_sess_id)
+        final <- load_app_sess_data(app_sess_id) |>
+            select(-c(user_agent, client_ip))
 
         # save as RDS
         print(paste("storing prepared data to", outputfile))

@@ -16,5 +16,5 @@ Next, run `prepare.R`. This will transform the raw data for all application sess
 
 ## Codebook for prepared tracking events data
 
-See `codebook_prepared_data.pdf` in this repository.
+See `data/prepared/codebook_prepared_data.pdf` in this repository.
 

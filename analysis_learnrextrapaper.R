@@ -46,11 +46,15 @@ scrollaggreg <- select(scrolldata, -c(user_start, user_end)) |>
         n_events_per_min = n_events / user_duration_sec * 60
     )
 
-ggplot(scrollaggreg, aes(x = group, y = pixels_per_min)) +
+n_ctrl_treat <- count(scrollaggreg, group) |> arrange(group) |> pull(n)
+
+plt <- ggplot(scrollaggreg, aes(x = group, y = pixels_per_min)) +
     geom_boxplot() +
-    scale_x_discrete(labels = c("without summary panel", "with summary panel")) +
-    labs(title = "Mean scrolling distance",
+    scale_x_discrete(labels = sprintf(c("without summary panel\nN=%d", "with summary panel\nN=%d"), n_ctrl_treat)) +
+    labs(title = "",   # title = "Mean scrolling distance"
          x = "", y = "Pixels / minute")
+plt
+ggsave("figures/summarypanel_scrolldist.png", plt, width = 1000, height = 1200, units = "px")
 
 ggplot(scrollaggreg, aes(x = group, y = n_events_per_min)) +
     geom_boxplot()
@@ -58,3 +62,124 @@ ggplot(scrollaggreg, aes(x = group, y = n_events_per_min)) +
 t.test(pixels_per_min ~ group, scrollaggreg, alternative = "greater")
 
 t.test(n_events_per_min ~ group, scrollaggreg, alternative = "greater")
+
+levels(tracking_data$type)
+
+# "attention spans" for all users in chapter 1: times where the page was visible to the user
+
+attention_spans_chapt1 <- select(tracking_data, group, user_code, event_time, type, chapter_index, value) |>
+    filter(chapter_index == 0) |>   # only use chapter 1!
+    select(-chapter_index) |>
+    mutate(visible = ifelse(type == "visibility_change", value == "visible", NA)) |>
+    group_by(user_code) |>
+    mutate(visible = ifelse(row_number() == 1, TRUE, visible)) |>
+    ungroup() |>
+    fill(visible) |>
+    #filter(!(type %in% c("contentscroll", "mouse"))) |>
+    group_by(user_code) |>
+    mutate(visibility_change = c(1, diff(visible))) |>
+    ungroup() |>
+    filter(visibility_change >= 0) |>
+    group_by(user_code) |>
+    mutate(att_index = cumsum(visibility_change)) |>
+    ungroup() |>
+    group_by(group, user_code, att_index) |>
+    summarise(start = min(event_time),
+              end = max(event_time),
+              duration = end - start) |>
+    ungroup()
+
+attention_spans_chapt1
+
+ggplot(attention_spans_chapt1) +
+    geom_linerange(aes(xmin = start, xmax = end, y = user_code, color = group)) +
+    scale_x_datetime()
+
+time_chapt1 <- group_by(attention_spans_chapt1, group, user_code) |>
+    summarise(duration_minutes = sum(as.numeric(as.duration(duration))) / 60)
+
+plt <- ggplot(time_chapt1, aes(x = group, y = duration_minutes)) +
+    geom_boxplot() +
+    scale_x_discrete(labels = sprintf(c("without summary panel\nN=%d", "with summary panel\nN=%d"), n_ctrl_treat)) +
+    labs(title = "",   # title = "Time spent in the first chapter"
+         x = "", y = "Duration in minutes")
+plt
+ggsave("figures/summarypanel_duration.png", plt, width = 1000, height = 1200, units = "px")
+
+t.test(duration_minutes ~ group, time_chapt1, alternative = "greater")
+
+
+attention_spans_chapt2 <- select(tracking_data, group, user_code, event_time, type, chapter_index, value) |>
+    filter(chapter_index == 2) |>   # only use chapter 2!
+    select(-chapter_index) |>
+    mutate(visible = ifelse(type == "visibility_change", value == "visible", NA)) |>
+    group_by(user_code) |>
+    mutate(visible = ifelse(row_number() == 1, TRUE, visible)) |>
+    ungroup() |>
+    fill(visible) |>
+    #filter(!(type %in% c("contentscroll", "mouse"))) |>
+    group_by(user_code) |>
+    mutate(visibility_change = c(1, diff(visible))) |>
+    ungroup() |>
+    filter(visibility_change >= 0) |>
+    group_by(user_code) |>
+    mutate(att_index = cumsum(visibility_change)) |>
+    ungroup() |>
+    group_by(group, user_code, att_index) |>
+    summarise(start = min(event_time),
+              end = max(event_time),
+              duration = end - start) |>
+    ungroup()
+
+attention_spans_chapt2
+
+ggplot(attention_spans_chapt2) +
+    geom_linerange(aes(xmin = start, xmax = end, y = user_code, color = group)) +
+    scale_x_datetime()
+
+time_chapt2 <- group_by(attention_spans_chapt2, group, user_code) |>
+    summarise(duration_minutes = sum(as.numeric(as.duration(duration))) / 60)
+
+ggplot(time_chapt2, aes(x = group, y = duration_minutes)) +
+    geom_boxplot() +
+    scale_x_discrete(labels = sprintf(c("without summary panel\nN=%d", "with summary panel\nN=%d"), n_ctrl_treat)) +
+    labs(title = "",   # title = "Time spent in the second chapter"
+         x = "", y = "Duration in minutes")
+
+
+attention_spans <- select(tracking_data, group, user_code, event_time, type, value) |>
+    mutate(visible = ifelse(type == "visibility_change", value == "visible", NA)) |>
+    group_by(user_code) |>
+    mutate(visible = ifelse(row_number() == 1, TRUE, visible)) |>
+    ungroup() |>
+    fill(visible) |>
+    #filter(!(type %in% c("contentscroll", "mouse"))) |>
+    group_by(user_code) |>
+    mutate(visibility_change = c(1, diff(visible))) |>
+    ungroup() |>
+    filter(visibility_change >= 0) |>
+    group_by(user_code) |>
+    mutate(att_index = cumsum(visibility_change)) |>
+    ungroup() |>
+    group_by(group, user_code, att_index) |>
+    summarise(start = min(event_time),
+              end = max(event_time),
+              duration = end - start) |>
+    ungroup()
+
+attention_spans
+
+ggplot(attention_spans) +
+    geom_linerange(aes(xmin = start, xmax = end, y = user_code, color = group)) +
+    scale_x_datetime()
+
+time_taken <- group_by(attention_spans, group, user_code) |>
+    summarise(duration_minutes = sum(as.numeric(as.duration(duration))) / 60)
+
+ggplot(time_taken, aes(x = group, y = duration_minutes)) +
+    geom_boxplot() +
+    scale_x_discrete(labels = sprintf(c("without summary panel\nN=%d", "with summary panel\nN=%d"), n_ctrl_treat)) +
+    labs(title = "",   # title = "Time spent in the first chapter"
+         x = "", y = "Duration in minutes")
+
+t.test(duration_minutes ~ group, time_taken, alternative = "greater")

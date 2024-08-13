@@ -515,3 +515,46 @@ plot_survey_numerical_items <- function(survey, per_group = TRUE, questions = NU
     list(data = summdata, plot = p)
 }
 
+#visualize timeline of answers to quiz questions using interactive scatterplots, either:
+#to get one plot per question plotting user-ID vs. time of submission, call
+#plot_submission_times_questions(loop_over = quo(ex_label),
+#                                loop_over_list = unique(quest_data$ex_label),
+#                                group_by_variable = quo(user_code),
+#                                quest_data=quest_data)
+#to get one plot per user-ID plotting question label vs. time of submission, call
+#plot_submission_times_questions(loop_over = quo(user_code),
+#                                loop_over_list = unique(quest_data$user_code),
+#                                group_by_variable = quo(ex_label),
+#                                quest_data=quest_data)
+plot_submission_times_questions <- function(loop_over, loop_over_list, group_by_variable, quest_data) {
+
+l <- htmltools::tagList()
+
+for (loop_id in loop_over_list) #loop_id for each question
+{
+    d_filtered <- filter(quest_data, !!loop_over==loop_id) #get() gets the name of the variable
+    #count number of submissions per group
+    d_filtered <- d_filtered %>%
+        group_by(!!group_by_variable) %>%
+        mutate(nb_submissions = n()) %>%
+        ungroup()
+    #create label for vertical axis, id with its number of submissions
+    d_filtered$user_id_and_nb_submissions <- paste0(d_filtered[, rlang::as_name(group_by_variable), drop=TRUE],
+                                                    "(", d_filtered$nb_submissions, ")")
+    #plot user (with nb submissions) vs. time of question submission
+    p <- ggplot(data = d_filtered, aes(x = event_time,
+                                       y = user_id_and_nb_submissions,
+                                       color = ex_correct,
+                                       #shape = as.name(loop_over),
+                                       text = paste("solution:", value))) +
+        geom_point() +
+        labs(title=loop_id) #+
+    #scale_x_datetime(limits = ymd_hms(c("2023-11-15-13-15-00", "2023-11-15-13-45-00")))
+    #plot a series of plotly graphs through a for loop using package htmltools,
+    #see https://forum.posit.co/t/display-plotly-graph-produced-in-a-for-loop-in-rmakrdown-html/168188
+    #l[[loop_id]] <- tagList(HTML(markdown::mark(text=paste0("\n\n#### ", loop_over,": ", loop_id, "\n"))), print(ggplotly(p)))
+    l[[loop_id]] <- tagList(HTML(markdown::mark(text=paste0(" "))), print(ggplotly(p)))
+    #above line could be simplified, but removing HTML() does not work
+}
+return(l)
+}

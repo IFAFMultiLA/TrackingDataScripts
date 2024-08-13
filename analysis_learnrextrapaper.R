@@ -1,3 +1,9 @@
+# Analysis effect of summary pane (with/without) on amount of scrolling
+#
+#
+# Author: Markus Konrad <markus.konrad@htw-berlin.de>
+# Date: Aug 2024
+#
 source("analysis_helpers.R")
 
 tracking_data <- load_app_sessions_tracking_data(c("36263541b9", "e47a7d46bf"), c("treat", "ctrl"))

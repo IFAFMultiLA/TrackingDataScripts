@@ -16,7 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r, message=FALSE}
 source("analysis_helpers.R")
 
-tracking_data <- readRDS("data/prepared/f33ac92fb8_tracking_data.rds")
+tracking_data <- load_app_sessions_tracking_data(c("f33ac92fb8"))
 ```
 
 
@@ -31,8 +31,8 @@ plot_tracking_sess_durations(track_sess_times)
 ### Limit tracking session events to exercise time frame
 
 ```{r}
-starttime <- strptime("2023-11-15 13:15", "%Y-%m-%d %H:%M")    # exercise start - 30 min.
-endtime <- strptime("2023-11-15 17:30", "%Y-%m-%d %H:%M")      # exercise end + 30 min.    
+starttime <- ymd_hm("2023-11-15 13:15", tz = "CET")    # exercise start - 30 min.
+endtime <- ymd_hm("2023-11-15 17:30", tz = "CET")      # exercise end + 30 min.    
 
 tracking_data <- filter(tracking_data, event_time >= starttime, event_time <= endtime) |>
     group_by(track_sess_id) |>
@@ -43,6 +43,10 @@ tracking_data <- filter(tracking_data, event_time >= starttime, event_time <= en
 track_sess_times <- tracking_sess_times(tracking_data)
 
 plot_tracking_sess_durations(track_sess_times)
+```
+
+```{r}
+plot_tracking_sess_durations(track_sess_times, by_user_code = TRUE)
 ```
 
 ```{r}
@@ -98,10 +102,10 @@ res <- plot_event_type_counts(tracking_data)
 res$table
 ```
 
-- number of events per event type in each tracking session:
+- number of events per event type per user:
 
 ```{r, fig.width=9, fig.height=9}
-res <- plot_event_type_counts_per_tracking_sess(tracking_data)
+res <- plot_event_type_counts_per_user(tracking_data)
 res$plot
 ```
 
@@ -141,7 +145,7 @@ quiz_tries <- question_or_exercise_submit_tries(quest_data)
 ```
 
 ```{r}
-plot_question_n_tries(quiz_tries)
+plot_question_n_tries(quiz_tries)$plot
 ```
 
 - interestingly, each question was finally answered correctly – no one gave up in between:

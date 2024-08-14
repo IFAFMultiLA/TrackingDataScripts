@@ -1,0 +1,107 @@
+---
+title: "Data analysis *Testgenauigkeit Bayes* from exercise session *Stochastik und ind. Statistik* (Master Wirtschaftsinformatik) / May 15 2024 - additional visualizations"
+author: "Markus Konrad, Andre Beinrucker"
+date: "2024-08-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Preparation
+- this documents contains supplementary visualisations using plotly graphs, to visualise the quantity and timeline of the quiz answers
+
+### Load data, helper functions
+
+```{r, message=FALSE, warning=FALSE}
+source("analysis_helpers.R")
+library(lubridate)
+library(plotly)
+library(htmltools)#to plot a series of plotly graphs through a for loop, see https://forum.posit.co/t/display-plotly-graph-produced-in-a-for-loop-in-rmakrdown-html/168188
+
+QUIZ_QUESTIONS_ORDER <- ordered(c(
+    "clinicalstudy1",
+    "clinicalstudy2",
+    "calc_sens",
+    "calc_spec",
+    "confmat",
+    "P_T_K",
+    "P_K",
+    "P_T",
+    "P_K_T",
+    "P_K_T_vergleich",
+    "P_nK_nT_ausdruck",
+    "P_nK_nT_berechnet",
+    "ppv_sens"
+))
+
+tracking_data <- load_app_sessions_tracking_data(c("36263541b9", "e47a7d46bf"), c("treat", "ctrl"))
+```
+
+```{r}
+track_sess_times <- tracking_sess_times(tracking_data)
+#plot_tracking_sess_durations(track_sess_times)
+```
+
+### Limit tracking session events to exercise time frame
+
+```{r}
+# conversion to the right timezone is extremely important!
+# all times in `tracking_data` are in UTC (aka GMT)
+starttime <- ymd_hm("2024-05-15 11:55", tz = "UTC")
+endtime <- ymd_hm("2024-05-15 15:00", tz = "UTC")
+
+tracking_data <- filter(tracking_data, track_sess_start >= starttime, event_time >= starttime, event_time <= endtime) |>
+    group_by(track_sess_id) |>
+    mutate(track_sess_end = min(track_sess_end, max(event_time))) |>
+    ungroup()
+
+track_sess_times <- tracking_sess_times(tracking_data)
+plot_tracking_sess_durations(track_sess_times)
+```
+
+```{r}
+plot_tracking_sess_durations(track_sess_times, by_user_code = TRUE)
+```
+
+- first user: 2 tabs?
+- short user session in middle: lab computer problem
+- short user sessions at the end: restart at the end to show something to the instructor
+- dismiss short sessions?
+- merge 6ab33... and 9cd0...?
+- merge f93a... two sessions?
+
+
+```{r}
+tracking_data <- filter(tracking_data, !(user_code %in% c("13d48be01652b32e", "1e8e8090e4bc1355", "9cd0199df2050778")))
+track_sess_times <- tracking_sess_times(tracking_data)
+```
+
+```{r include=FALSE}
+quest_data <- question_submit_data(tracking_data, QUIZ_QUESTIONS_ORDER)
+res <- plot_question_prop_correct(quest_data)
+res$plot
+```
+
+
+### Plot user ID vs. time of question submission (one graph for each question)
+
+```{r results='asis'}
+plot_submission_times_questions(loop_over = quo(ex_label),
+                                loop_over_list = unique(quest_data$ex_label),
+                                group_by_variable = quo(user_code),
+                                quest_data=quest_data)
+#knitting this document gives the desired plotly graphs, executing the codechunk wise additionally outputs some strange shiny.tag.list 
+```
+### Plot question vs. time of question submission  (one graph for each student)
+
+```{r results='asis'}
+plot_submission_times_questions(loop_over = quo(user_code),
+                                loop_over_list = unique(quest_data$user_code),
+                                group_by_variable = quo(ex_label),
+                                quest_data=quest_data)
+#knitting this document gives the desired plotly graphs, executing the code chunkwise additionally outputs some strange shiny.tag.list 
+```
+
+

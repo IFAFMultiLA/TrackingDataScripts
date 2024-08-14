@@ -2,7 +2,7 @@
 #
 # Several helper functions used for tracking data analyses.
 #
-# Author: Markus Konrad <markus.konrad@htw-berlin.de>
+# Authors: Markus Konrad <markus.konrad@htw-berlin.de>, Andre Beinrucker <andre.beinrucker@htw-berlin.de>
 # Date: Nov./Dec. 2023
 #
 
@@ -12,6 +12,7 @@ library(bcpa)
 library(tidyr)
 library(ggplot2)
 library(patchwork)
+library(lubridate)
 
 
 theme_set(theme_bw())  # set default theme
@@ -21,14 +22,16 @@ theme_set(theme_bw())  # set default theme
 # Load all tracking data from several application sessions identified in vector `app_sessions`. Optionally assign
 # each application session to a group passed via `groups`. If given, `groups` must has the same length as
 # `app_sessions`.
-load_app_sessions_tracking_data <- function(app_sessions, groups = NULL) {
+load_app_sessions_tracking_data <- function(app_sessions, groups = NULL, shorten_user_code = TRUE) {
     stopifnot(is.null(groups) || length(app_sessions) == length(groups))
 
     tracking_data <- lapply(app_sessions, function(sess) {
         sess_data <- readRDS(sprintf("data/prepared/%s_tracking_data.rds", sess)) |>
             mutate(app_session = sess)
 
-        if (!is.null(groups)) {
+        if (is.null(groups)) {
+            sess_data <- mutate(sess_data, group = "")
+        } else {
             sess_data <- mutate(sess_data, group = groups[which(app_sessions == sess)])
         }
 
@@ -38,25 +41,40 @@ load_app_sessions_tracking_data <- function(app_sessions, groups = NULL) {
         mutate(app_session = as.factor(app_session))
 
 
-    if (is.null(groups)) {
-        select(tracking_data, app_session, everything())
+    if (shorten_user_code) {
+        tracking_data$user_code <- as.factor(substr(tracking_data$user_app_sess_code, 0, 16))
+
+        stopifnot(nrow(distinct(tracking_data, user_app_sess_code)) == nrow(distinct(tracking_data, user_code)))
     } else {
-        mutate(tracking_data, group = as.factor(group)) |>
-            select(app_session, group, everything())
+        tracking_data$user_code <- as.factor(tracking_data$user_app_sess_code)
     }
+
+
+    mutate(tracking_data, group = as.factor(group)) |>
+        select(app_session, group, user_code, everything())
 }
 
 # Get start date, end date and duration for each tracking session in `tracking_data`.
 tracking_sess_times <- function(tracking_data) {
-    distinct(tracking_data, track_sess_id, track_sess_start, track_sess_end) |>
+    distinct(tracking_data, user_code, track_sess_id, track_sess_start, track_sess_end) |>
         arrange(track_sess_start) |>
         mutate(duration = track_sess_end - track_sess_start)
+
 }
 
 # Get all tracking data related to question submissions in `tracking_data`.
-question_submit_data <- function(tracking_data) {
-    filter(tracking_data, type == "question_submit") |>
-        select(track_sess_id, event_time, ex_label, ex_correct, value)
+# Optionally reorder the `ex_label` variable according to `ex_label_order`
+question_submit_data <- function(tracking_data, ex_label_order = NULL) {
+    quest_data <- filter(tracking_data, type == "question_submit", !startsWith(as.character(ex_label), "survey_")) |>
+        select(user_code, group, event_time, ex_label, ex_correct, value) |>
+        mutate(ex_label = factor(ex_label))  # update levels
+
+    if (!is.null(ex_label_order)) {
+        stopifnot(setequal(levels(quest_data$ex_label), ex_label_order))
+        quest_data$ex_label <- ordered(quest_data$ex_label, ex_label_order)
+    }
+
+    quest_data
 }
 
 # Get all survey data from `tracking_data` as wide table with answers in columns per user and tracking session ID.
@@ -80,7 +98,7 @@ exercise_result_data <- function(tracking_data) {
     # in step 3, `ex_correct` is transformed so that exercises where there was no result submitted (i.e. NA) are counted
     # as "not correct"
     filter(tracking_data, type  == "ex_result") |>
-        select(track_sess_id, event_time, type, starts_with("ex_"), value) |>
+        select(group, user_code, event_time, type, starts_with("ex_"), value) |>
         mutate(ex_correct = ifelse(is.na(ex_correct), FALSE, ex_correct))
 }
 
@@ -89,8 +107,8 @@ exercise_result_data <- function(tracking_data) {
 # `question_submit_data()` or `exercise_result_data()`.
 question_or_exercise_submit_tries <- function(quest_or_ex_data) {
     select(quest_or_ex_data, -value) |>
-        group_by(track_sess_id, ex_label) |>    # calculate per tracking session and exercise
-        arrange(track_sess_id, ex_label, event_time) |>
+        group_by(user_code, ex_label) |>    # calculate per tracking session and exercise
+        arrange(user_code, ex_label, event_time) |>
         mutate(try = row_number()) |>           # current try equals the row number after sorting by time
         filter(row_number() == n()) |>          # select only the last row per group to get the final try count
         ungroup()
@@ -101,7 +119,7 @@ question_or_exercise_submit_tries <- function(quest_or_ex_data) {
 prop_correct_in_ith_try <- function(quest_or_ex_data) {
     # get the maximum number of tries in total
     max_tries <- select(quest_or_ex_data, -value) |>
-        group_by(track_sess_id, ex_label) |>
+        group_by(group, user_code, ex_label) |>
         count() |>
         ungroup() |>
         pull(n) |>
@@ -110,17 +128,17 @@ prop_correct_in_ith_try <- function(quest_or_ex_data) {
     # for each number of tries in range [1, `max_tries`], calculate the proportion of correct answers per exercise
     lapply(1:max_tries, function(which_try) {
         select(quest_or_ex_data, -value) |>
-            group_by(track_sess_id, ex_label) |>                # for each exercise in each tracking session ...
-            arrange(track_sess_id, ex_label, event_time) |>
+            group_by(group, user_code, ex_label) |>                # for each exercise in each tracking session ...
+            arrange(group, user_code, ex_label, event_time) |>
             mutate(try = row_number(), max_try = max(try)) |>   # ... get each try and the overall number of tries and
             filter(try == min(max_try, which_try)) |>      # ... filter for the current try or the last try as fallback;
             ungroup() |>
-            group_by(ex_label) |>                          # then calculate the proportion of correct answers for ...
-            summarise(prop_correct = mean(ex_correct)) |>  # ... each exercise
+            group_by(group, ex_label) |>                   # then calculate the proportion of correct answers for ...
+            summarise(prop_correct = mean(ex_correct), .groups = "keep") |>  # ... each exercise
             ungroup() |>
             mutate(try = which_try)
     }) |> bind_rows() |>                                   # concatenate to single dataframe
-        group_by(ex_label) |>
+        group_by(group, ex_label) |>
         mutate(lag_correct = lag(prop_correct)) |>         # keep only observations where prev. try was first try or
         filter(is.na(lag_correct) | lag_correct < 1) |>    # was not 100% correct, yet
         ungroup() |>
@@ -199,12 +217,20 @@ mouse_tracks_features <- function(mouse_tracks_data) {
 # ----- plotting functions -----
 
 # Plot tracking session durations given in `track_sess_times` (as returned from `tracking_sess_times()`).
-plot_tracking_sess_durations <- function(track_sess_times) {
-    ggplot(track_sess_times, aes(y = ordered(track_sess_id))) +
-        geom_linerange(aes(xmin = track_sess_start, xmax = track_sess_end)) +
-        geom_point(aes(x = track_sess_start)) +
-        geom_point(aes(x = track_sess_end)) +
-        labs(title = "Tracking session start and end times", x = "Date", y = "Tracking session ID")
+plot_tracking_sess_durations <- function(track_sess_times, by_user_code = FALSE) {
+    if (by_user_code) {
+        ggplot(track_sess_times, aes(y = user_code)) +
+            geom_linerange(aes(xmin = track_sess_start, xmax = track_sess_end), alpha = 0.5) +
+            geom_point(aes(x = track_sess_start), alpha = 0.5) +
+            geom_point(aes(x = track_sess_end), alpha = 0.5) +
+            labs(title = "Tracking session start and end times", x = "Date", y = "User ID")
+    } else {
+        ggplot(track_sess_times, aes(y = ordered(track_sess_id), color = user_code)) +
+            geom_linerange(aes(xmin = track_sess_start, xmax = track_sess_end)) +
+            geom_point(aes(x = track_sess_start)) +
+            geom_point(aes(x = track_sess_end)) +
+            labs(title = "Tracking session start and end times", x = "Date", y = "Tracking session ID")
+    }
 }
 
 # Plot tracking session durations as histogram given by `track_sess_times` (as returned from `tracking_sess_times()`).
@@ -223,36 +249,73 @@ plot_event_type_counts <- function(tracking_data) {
     p <- ggplot(type_counts, aes(x = type, y = n)) +
         geom_col() +
         scale_y_log10() +
-        labs(title = "Number of events per type", x = "event type", y = "frequency on log10 scale")
+        labs(title = "Number of events per type", x = "event type", y = "frequency on log10 scale") +
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
     list(plot = p, table = type_counts)
 }
 
-# Make bar plot of event type counts *per tracking session* on log10 scale. `tracking_data` is data as prepared in
+# Make bar plot of event type counts *per user* on log10 scale. `tracking_data` is data as prepared in
 # `prepare.R`.
-plot_event_type_counts_per_tracking_sess <- function(tracking_data) {
-    type_counts <- count(tracking_data, track_sess_id, type)
+plot_event_type_counts_per_user <- function(tracking_data) {
+    type_counts <- count(tracking_data, user_code, type)
     p <- ggplot(type_counts, aes(x = type, y = n)) +
         geom_col() +
         scale_y_log10() +
         labs(title = "Number of events per type", x = "event type", y = "frequency on log10 scale") +
-        facet_wrap(vars(track_sess_id)) +
+        facet_wrap(vars(user_code)) +
         theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
     list(plot = p, table = type_counts)
 }
 
 # Plot proportion of correct answers per question. `quest_data` is data as returned from `question_submit_data()`.
-plot_question_prop_correct <- function(quest_data) {
-    prop_per_question <- group_by(quest_data, ex_label) |>
-        summarise(n = n(),
-                  prop_correct = mean(ex_correct),
-                  sd_correct = sqrt(prop_correct*(1-prop_correct)/n))
-    p <- ggplot(prop_per_question, aes(y = ex_label)) +
+plot_question_prop_correct <- function(quest_data, per_group = FALSE) {
+    grp_compare <- length(levels(quest_data$group)) > 1
+
+    if (grp_compare) {
+        if (per_group) {
+            d <- group_by(quest_data, group)
+        } else {
+            d <- group_by(quest_data, group, ex_label)
+        }
+    } else {
+        d <- group_by(quest_data, ex_label)
+    }
+
+    prop_per_question <- summarise(d,
+                                   n = n(),
+                                   prop_correct = mean(ex_correct),
+                                   sd_correct = sqrt(prop_correct*(1-prop_correct)/n)) |>
+        ungroup()
+
+    if(grp_compare) {
+        if (per_group) {
+            mapping <- aes(y = group, color = group)
+        } else {
+            prop_per_question <- group_by(prop_per_question, group) |>
+                arrange(ex_label) |>
+                mutate(ex_label_pos = 1:n()) |>
+                ungroup() |>
+                mutate(ex_label_pos = ex_label_pos + (as.integer(group) * 2 - 3) * 0.12)
+
+            mapping <- aes(y = ex_label_pos, color = group)
+        }
+    } else {
+        mapping <- aes(y = ex_label)
+    }
+
+    p <- ggplot(prop_per_question, mapping) +
         geom_linerange(aes(xmin = prop_correct-sd_correct, xmax = prop_correct+sd_correct)) +
         geom_point(aes(x = prop_correct)) +
-        scale_y_discrete(limits = rev) +
+        geom_text(aes(x = prop_correct, label = paste("n =", n)), nudge_x = 0.05, nudge_y = 0.15, size = 3) +
         labs(title = "Proportion of correct answers per question",
              y = "question label",
              x = "proportion with standard deviations")
+
+    if (grp_compare && !per_group) {
+        lbls <- sort(unique(as.character(prop_per_question$ex_label)))
+        p <- p + scale_y_continuous(breaks = 1:length(lbls), labels = lbls)
+    }
+
     list(plot = p, table = prop_per_question)
 }
 
@@ -274,12 +337,67 @@ plot_exercise_prop_correct <- function(ex_data) {
 
 # Plot number of tries per question as box plot. `quiz_tries` is data as returned from
 # `question_or_exercise_submit_tries()`.
-plot_question_n_tries <- function(quiz_tries) {
-    ggplot(quiz_tries, aes(y = ex_label, x = try)) +
-        geom_boxplot() +
-        geom_jitter(height = 0.25) +
-        scale_y_discrete(limits = rev) +
-        labs(title = "Number of tries per question", y = "question label", x = "number of tries")
+plot_question_n_tries <- function(quiz_tries, per_group = FALSE) {
+    grp_compare <- length(levels(quiz_tries$group)) > 1
+
+    if (grp_compare) {
+        if (per_group) {
+            d <- group_by(quiz_tries, group)
+        } else {
+            d <- group_by(quiz_tries, group, ex_label)
+        }
+    } else {
+        d <- group_by(quiz_tries, ex_label)
+    }
+
+    n_tries <- summarise(d,
+                         n = n(),
+                         median_tries = median(try),
+                         tries_lwr = quantile(try, 0.25),
+                         tries_upr = quantile(try, 0.75)) |>
+        ungroup()
+
+    if(grp_compare) {
+        if (per_group) {
+            mapping <- aes(y = group, color = group)
+        } else {
+            n_tries <- group_by(n_tries, group) |>
+                arrange(ex_label) |>
+                mutate(ex_label_pos = 1:n()) |>
+                ungroup() |>
+                mutate(ex_label_pos = ex_label_pos + (as.integer(group) * 2 - 3) * 0.12)
+
+            mapping <- aes(y = ex_label_pos, color = group)
+        }
+    } else {
+        mapping <- aes(y = ex_label)
+    }
+
+    p <- ggplot(n_tries, mapping) +
+        geom_linerange(aes(xmin = tries_lwr, xmax = tries_upr)) +
+        geom_point(aes(x = median_tries)) +
+        geom_text(aes(x = median_tries, label = paste("n =", n)), nudge_x = 0.05, nudge_y = 0.15, size = 3) +
+        labs(title = "Number of tries per question",
+             y = "question label",
+             x = "25th, 50th and 75th percentile")
+
+    if (grp_compare && !per_group) {
+        lbls <- sort(unique(as.character(n_tries$ex_label)))
+        p <- p + scale_y_continuous(breaks = 1:length(lbls), labels = lbls)
+    }
+
+    list(plot = p, table = n_tries)
+}
+
+# Plot the proportion of correct answers per question after the last try
+plot_prop_correct_after_last_try <- function(quiz_tries) {
+    group_by(quiz_tries, group, ex_label) |>
+        summarise(prop_correct = mean(ex_correct)) |>
+        ggplot(aes(x = ex_label, y = prop_correct, fill = group)) +
+            geom_col(position = position_dodge()) +
+            labs(title = "Proportion of correct answers after the last try",
+                 x = "question label", y = "proportion") +
+            theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 }
 
 # Plot number of tries per coding exercise as box plot. `ex_tries` is data as returned from
@@ -289,6 +407,7 @@ plot_exercise_n_tries <- function(ex_tries) {
         geom_boxplot() +
         geom_jitter(height = 0.25) +
         scale_y_discrete(limits = rev) +
+        facet_wrap(vars(group)) +
         labs(title = "Number of tries per exercise", y = "exercise label", x = "number of tries")
 }
 
@@ -337,6 +456,7 @@ plot_prop_correct_per_try <- function(prop_correct_per_try, title) {
         scale_x_continuous(breaks = 1:max(prop_correct_per_try$try)) +
         scale_y_continuous(limits = c(0, 1)) +
         scale_color_discrete(name = "Label") +
+        facet_wrap(vars(group)) +
         labs(title = title, x = "Try", y = "Proportion of correct submissions")
 }
 
@@ -355,4 +475,97 @@ plot_mouse_velocity_heatmap <- function(tracks_features_per_track_sess) {
         labs(title = "Heatmap of movement velocity per minute in each tracking session",
              x = "Minute after tracking session start",
              y = "Tracking session ID")
+}
+
+# Make boxplots for all numerical survey items from survey data given by `survey`.
+plot_survey_numerical_items <- function(survey, per_group = TRUE, questions = NULL, scale_labels = NULL,
+                                        xlab = "score on 5-point Likert scale", ylab = NULL,
+                                        title = "Survey results") {
+    numdata <- select(survey, -c(mehrere_tabs, kommentar)) |>
+        pivot_longer(schwierigkeit:zufriedenheit, names_to = "item") |>
+        filter(!is.na(value))
+
+    if (per_group) {
+        grouped_data <- group_by(numdata, group, item)
+        aes_mapping <- aes(x = value, y = item, color = group)
+    } else {
+        grouped_data <- group_by(numdata, group, item)
+        aes_mapping <- aes(x = value, y = item)
+    }
+
+    summdata <- summarise(grouped_data, mean = mean(value), .groups = "keep") |>
+        pivot_wider(names_from = item, values_from = mean)
+
+    p <- ggplot(numdata, aes_mapping) +
+        geom_boxplot(position = position_dodge2(padding = 0.3, reverse = TRUE), outliers = FALSE) +
+        geom_jitter(width = 0.1, height = 0.3, alpha = 0.25) +
+        labs(title = title,
+             x = xlab,
+             y = ylab)
+
+    if (!is.null(questions)) {
+        item_labels <- unlist(questions, use.names = FALSE)[order(names(questions))]
+        p <- p + scale_y_discrete(limits = rev, labels = rev(item_labels))
+    } else {
+        p <- p + scale_y_discrete(limits = rev)
+    }
+
+    if (!is.null(scale_labels)) {
+        scale_labels_vec <- unlist(scale_labels[order(names(scale_labels))], use.names = FALSE)
+        scale_left <- rev(scale_labels_vec[seq(1, length(scale_labels_vec), 2)])
+        scale_right <- rev(scale_labels_vec[seq(2, length(scale_labels_vec), 2)])
+        p <- p + annotate("label", x = 0, y = 1:length(scale_labels), label = scale_left, size = 2.5, hjust = 0) +
+            annotate("label", x = 6, y = 1:length(scale_labels), label = scale_right, size = 2.5, hjust = 1) +
+            scale_x_continuous(limits = c(0, 6), breaks = 1:5)
+    } else {
+        p <- p + scale_x_discrete(limits = 1:5)
+    }
+
+    list(data = summdata, plot = p)
+}
+
+#visualize timeline of answers to quiz questions using interactive scatterplots, either:
+#to get one plot per question plotting user-ID vs. time of submission, call
+#plot_submission_times_questions(loop_over = quo(ex_label),
+#                                loop_over_list = unique(quest_data$ex_label),
+#                                group_by_variable = quo(user_code),
+#                                quest_data=quest_data)
+#to get one plot per user-ID plotting question label vs. time of submission, call
+#plot_submission_times_questions(loop_over = quo(user_code),
+#                                loop_over_list = unique(quest_data$user_code),
+#                                group_by_variable = quo(ex_label),
+#                                quest_data=quest_data)
+plot_submission_times_questions <- function(loop_over, loop_over_list, group_by_variable, quest_data) {
+
+l <- htmltools::tagList()
+
+for (loop_id in loop_over_list) #loop_id for each question
+{
+    d_filtered <- filter(quest_data, !!loop_over==loop_id)
+    #count number of submissions per group
+    d_filtered <- d_filtered %>%
+        group_by(!!group_by_variable) %>%
+        mutate(nb_submissions = n()) %>%
+        ungroup()
+    #create label for vertical axis, id with its number of submissions
+    grp_vec <- d_filtered[, rlang::as_name(group_by_variable), drop=TRUE]
+    lbls <- paste0(grp_vec, "(", d_filtered$nb_submissions, ")")
+    d_filtered$user_id_and_nb_submissions <- ordered(lbls, na.omit(sort(unique(lbls))[order(levels(grp_vec))]))
+    #plot user (with nb submissions) vs. time of question submission
+    p <- ggplot(data = d_filtered, aes(x = event_time,
+                                       y = user_id_and_nb_submissions,
+                                       color = ex_correct,
+                                       #shape = as.name(loop_over),
+                                       text = paste("solution:", value))) +
+        geom_point() +
+        scale_y_discrete(limits = rev) +
+        labs(title=loop_id, y = "") #+
+    #scale_x_datetime(limits = ymd_hms(c("2023-11-15-13-15-00", "2023-11-15-13-45-00")))
+    #plot a series of plotly graphs through a for loop using package htmltools,
+    #see https://forum.posit.co/t/display-plotly-graph-produced-in-a-for-loop-in-rmakrdown-html/168188
+    #l[[loop_id]] <- tagList(HTML(markdown::mark(text=paste0("\n\n#### ", loop_over,": ", loop_id, "\n"))), print(ggplotly(p)))
+    l[[loop_id]] <- tagList(HTML(markdown::mark(text=paste0(" "))), print(ggplotly(p)))
+    #above line could be simplified, but removing HTML() does not work
+}
+return(l)
 }

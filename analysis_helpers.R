@@ -2,7 +2,7 @@
 #
 # Several helper functions used for tracking data analyses.
 #
-# Author: Markus Konrad <markus.konrad@htw-berlin.de>
+# Authors: Markus Konrad <markus.konrad@htw-berlin.de>, Andre Beinrucker <andre.beinrucker@htw-berlin.de>
 # Date: Nov./Dec. 2023
 #
 
@@ -42,11 +42,11 @@ load_app_sessions_tracking_data <- function(app_sessions, groups = NULL, shorten
 
 
     if (shorten_user_code) {
-        tracking_data$user_code <- substr(tracking_data$user_app_sess_code, 0, 16)
+        tracking_data$user_code <- as.factor(substr(tracking_data$user_app_sess_code, 0, 16))
 
         stopifnot(nrow(distinct(tracking_data, user_app_sess_code)) == nrow(distinct(tracking_data, user_code)))
     } else {
-        tracking_data$user_code <- tracking_data$user_app_sess_code
+        tracking_data$user_code <- as.factor(tracking_data$user_app_sess_code)
     }
 
 
@@ -63,9 +63,18 @@ tracking_sess_times <- function(tracking_data) {
 }
 
 # Get all tracking data related to question submissions in `tracking_data`.
-question_submit_data <- function(tracking_data) {
-    filter(tracking_data, type == "question_submit", !startsWith(as.character(ex_label), "survey_")) |>
-        select(user_code, group, event_time, ex_label, ex_correct, value)
+# Optionally reorder the `ex_label` variable according to `ex_label_order`
+question_submit_data <- function(tracking_data, ex_label_order = NULL) {
+    quest_data <- filter(tracking_data, type == "question_submit", !startsWith(as.character(ex_label), "survey_")) |>
+        select(user_code, group, event_time, ex_label, ex_correct, value) |>
+        mutate(ex_label = factor(ex_label))  # update levels
+
+    if (!is.null(ex_label_order)) {
+        stopifnot(setequal(levels(quest_data$ex_label), ex_label_order))
+        quest_data$ex_label <- ordered(quest_data$ex_label, ex_label_order)
+    }
+
+    quest_data
 }
 
 # Get all survey data from `tracking_data` as wide table with answers in columns per user and tracking session ID.
@@ -532,15 +541,16 @@ l <- htmltools::tagList()
 
 for (loop_id in loop_over_list) #loop_id for each question
 {
-    d_filtered <- filter(quest_data, !!loop_over==loop_id) #get() gets the name of the variable
+    d_filtered <- filter(quest_data, !!loop_over==loop_id)
     #count number of submissions per group
     d_filtered <- d_filtered %>%
         group_by(!!group_by_variable) %>%
         mutate(nb_submissions = n()) %>%
         ungroup()
     #create label for vertical axis, id with its number of submissions
-    d_filtered$user_id_and_nb_submissions <- paste0(d_filtered[, rlang::as_name(group_by_variable), drop=TRUE],
-                                                    "(", d_filtered$nb_submissions, ")")
+    grp_vec <- d_filtered[, rlang::as_name(group_by_variable), drop=TRUE]
+    lbls <- paste0(grp_vec, "(", d_filtered$nb_submissions, ")")
+    d_filtered$user_id_and_nb_submissions <- ordered(lbls, na.omit(sort(unique(lbls))[order(levels(grp_vec))]))
     #plot user (with nb submissions) vs. time of question submission
     p <- ggplot(data = d_filtered, aes(x = event_time,
                                        y = user_id_and_nb_submissions,
@@ -548,7 +558,8 @@ for (loop_id in loop_over_list) #loop_id for each question
                                        #shape = as.name(loop_over),
                                        text = paste("solution:", value))) +
         geom_point() +
-        labs(title=loop_id) #+
+        scale_y_discrete(limits = rev) +
+        labs(title=loop_id, y = "") #+
     #scale_x_datetime(limits = ymd_hms(c("2023-11-15-13-15-00", "2023-11-15-13-45-00")))
     #plot a series of plotly graphs through a for loop using package htmltools,
     #see https://forum.posit.co/t/display-plotly-graph-produced-in-a-for-loop-in-rmakrdown-html/168188

@@ -17,9 +17,24 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r, message=FALSE, warning=FALSE}
 source("analysis_helpers.R")
 library(lubridate)
-library(forcats) #zum neu Ordnen der Faktor-levels ex_label mit fct_relevel()
 library(plotly)
 library(htmltools)#to plot a series of plotly graphs through a for loop, see https://forum.posit.co/t/display-plotly-graph-produced-in-a-for-loop-in-rmakrdown-html/168188
+
+QUIZ_QUESTIONS_ORDER <- ordered(c(
+    "clinicalstudy1",
+    "clinicalstudy2",
+    "calc_sens",
+    "calc_spec",
+    "confmat",
+    "P_T_K",
+    "P_K",
+    "P_T",
+    "P_K_T",
+    "P_K_T_vergleich",
+    "P_nK_nT_ausdruck",
+    "P_nK_nT_berechnet",
+    "ppv_sens"
+))
 
 tracking_data <- load_app_sessions_tracking_data(c("36263541b9", "e47a7d46bf"), c("treat", "ctrl"))
 ```
@@ -64,7 +79,7 @@ track_sess_times <- tracking_sess_times(tracking_data)
 ```
 
 ```{r include=FALSE}
-quest_data <- question_submit_data(tracking_data)
+quest_data <- question_submit_data(tracking_data, QUIZ_QUESTIONS_ORDER)
 res <- plot_question_prop_correct(quest_data)
 res$plot
 ```

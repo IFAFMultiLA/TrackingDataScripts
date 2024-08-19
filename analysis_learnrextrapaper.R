@@ -189,3 +189,86 @@ ggplot(time_taken, aes(x = group, y = duration_minutes)) +
          x = "", y = "Duration in minutes")
 
 t.test(duration_minutes ~ group, time_taken, alternative = "greater")
+
+
+survey <- survey_data(tracking_data)
+
+survey_questions <- list(
+    bedienung_ctrl = "Without summary panel: The UI of this app is  ...",
+    bedienung_treat = "With summary panel: The UI of this app is  ...",
+    praxisbeispiel = "I find clinical tests as practical example ...",
+    verwendung_uebung = "In class, we should ...",
+    verwendung_zuhause = "At home, I would ...",
+    schwierigkeit = "I find the complexity of the topic ...",
+    zufriedenheit = "All in all, I find this app ..."
+
+)
+survey_scale <- list(
+    bedienung_ctrl = c("hard to understand and use", "easy to understand and use"),
+    bedienung_treat = c("hard to understand and use", "easy to understand and use"),
+    praxisbeispiel = c("uninteresting", "interesting"),
+    verwendung_uebung = c("never use such apps", "always use such apps"),
+    verwendung_zuhause = c("never use such apps", "always use such apps"),
+    schwierigkeit = c("very difficult", "very easy"),
+    zufriedenheit = c("very bad", "very good")
+)
+
+numdata <- mutate(survey,
+                  bedienung_treat = ifelse(group == "treat", bedienung, NA),
+                  bedienung_ctrl = ifelse(group == "ctrl", bedienung, NA)) |>
+    select(-c(group, bedienung, mehrere_tabs, kommentar)) |>
+    pivot_longer(schwierigkeit:bedienung_ctrl, names_to = "item") |>
+    filter(!is.na(value), item %in% names(survey_questions)) |>
+    mutate(item = factor(item, levels = names(survey_questions)))
+
+summdata <- summarise(numdata, n = n(), .by = c(item, value)) |>
+    mutate(value = as.integer(value)) |>
+    arrange(item, value)
+
+items <- levels(numdata$item)
+
+plts <- lapply(1:length(items), function(i) {
+    it <- items[i]
+    itemdata <- filter(summdata, item == it)
+    max_y <- max(summdata$n)
+    p <- ggplot(itemdata, aes(x = value, y = n)) +
+        geom_col(fill = "gray") +
+        geom_vline(aes(xintercept = median(value))) +
+        scale_x_continuous(limits = c(0.5, 5.5)) +
+        scale_y_continuous(limits = c(0,  max_y)) +
+        labs(title = survey_questions[[it]],
+             #subtitle = sprintf("N=%d", sum(itemdata$n)),
+             x = "", y = "") +
+        annotate("label", x = c(0.5, 5.5), y = max_y, label = survey_scale[[it]],
+                 hjust = c(0, 1), vjust = 1, size = 2.5) +
+        annotation_custom(
+            grob = grid::textGrob(sprintf("N=%d", sum(itemdata$n)), hjust = 1, gp = grid::gpar(cex = 0.75)),
+            xmin = 5.5, xmax = 5.5, ymin = max_y + 3, ymax = max_y + 3) +
+        coord_cartesian(clip = "off") +
+        theme(panel.background = element_rect(fill = "white", color = NA),
+              panel.grid = element_blank(),
+              panel.border = element_blank(),
+              axis.line.x = element_line(color = "darkgray"),
+              plot.title = element_text(size = 10),
+              axis.text.x = element_text(size = 7),
+              axis.text.y = element_text(size = 7))
+
+    if (i < length(items)) {
+        p <- p + theme(axis.text.x = element_blank(),
+                       axis.ticks.x = element_blank(),
+                       plot.subtitle = element_text(hjust = 1))
+    }
+
+    # if (i > 1) {
+    #     p <- p + theme(axis.text.y = element_blank(),
+    #                    axis.ticks.y = element_blank())
+    # }
+
+    p
+})
+
+p <- wrap_plots(plts, ncol = 1)
+p
+
+ggsave("figures/survey_results.png", p, width = 1000, height = 1000, units = "px", scale = 2)
+

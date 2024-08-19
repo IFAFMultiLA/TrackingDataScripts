@@ -237,7 +237,6 @@ plot_survey_numerical_items(survey, per_group = FALSE, questions = survey_questi
 plot_survey_numerical_items(survey, questions = survey_questions, scale_labels = survey_scale)
 ```
 
-
 ```{r}
 multiple_tabs_data <- select(survey, -c(schwierigkeit:kommentar), mehrere_tabs) |>
     mutate(mehrere_tabs = mehrere_tabs == "j") |>

@@ -62,6 +62,15 @@ plt <- ggplot(scrollaggreg, aes(x = group, y = pixels_per_min)) +
 plt
 ggsave("figures/summarypanel_scrolldist.png", plt, width = 1000, height = 1200, units = "px")
 
+plt <- ggplot(scrollaggreg, aes(x = group, y = pixels_per_min)) +
+    geom_boxplot() +
+    scale_x_discrete(labels = sprintf(c("Ohne Zusammenfassungsleiste\nN=%d",
+                                        "Mit Zusammenfassungsleiste\nN=%d"), n_ctrl_treat)) +
+    labs(title = "Vergleich Mittlere Scrolldistanz pro Minute",
+         x = "", y = "Pixel pro Minute")
+plt
+ggsave("figures/summarypanel_scrolldist_poster.png", plt, width = 15, height = 20, units = "cm", scale = 0.75, dpi = 600)
+
 ggplot(scrollaggreg, aes(x = group, y = n_events_per_min)) +
     geom_boxplot()
 

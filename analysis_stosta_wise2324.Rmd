@@ -248,3 +248,9 @@ filter(tracks_features_per_track_sess_filled, t_step <= 10) |>
     plot_mouse_velocity_heatmap()
 ```
 
+```{r}
+mouse_tracks_data <- mouse_tracks_for_tracking_sess(tracking_data, 189)
+p <- plot_mouse_tracks_for_tracking_session(mouse_tracks_data$tracks, 189, "desktop")
+ggsave("figures/mouse_tracks_189.png", p, width = 20, height = 15, units = "cm", scale = 1.5, dpi = 300)
+```
+

@@ -73,10 +73,14 @@ extract_other_tracking_data <- function(row, row_index) {
             coord2 <- c(coord2, v$main_content_scrollsize[[2]])
         }
 
-        res <- res[rep(1, length(type)),]
-        res$type <- type
-        res$coord1 <- coord1
-        res$coord2 <- coord2
+        if (length(type) == length(coord1) && length(type) == length(coord2)) {
+            res <- res[rep(1, length(type)),]
+            res$type <- type
+            res$coord1 <- coord1
+            res$coord2 <- coord2
+        } else {
+            warning('device_info_update event with invalid data')
+        }
     } else if (row$event_type == "input_change") {
         res$xpath <- v$xpath
         res$css <- paste0('#', v$id)

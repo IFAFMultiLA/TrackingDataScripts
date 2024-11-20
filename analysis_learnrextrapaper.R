@@ -6,18 +6,7 @@
 #
 source("analysis_helpers.R")
 
-tracking_data <- load_app_sessions_tracking_data(c("36263541b9", "e47a7d46bf"), c("treat", "ctrl"))
-
-# summer semester 2024 valid times
-starttime <- ymd_hm("2024-05-15 11:55", tz = "UTC")
-endtime <- ymd_hm("2024-05-15 15:00", tz = "UTC")
-
-tracking_data <- filter(tracking_data, track_sess_start >= starttime, event_time >= starttime, event_time <= endtime) |>
-    group_by(track_sess_id) |>
-    mutate(track_sess_end = min(track_sess_end, max(event_time))) |>
-    ungroup()
-
-tracking_data <- filter(tracking_data, !(user_code %in% c("13d48be01652b32e", "1e8e8090e4bc1355", "9cd0199df2050778")))
+tracking_data <- readRDS('data/prepared/sosewise24_tracking_data.rds')
 
 track_sess_times <- tracking_sess_times(tracking_data)
 
@@ -56,11 +45,11 @@ n_ctrl_treat <- count(scrollaggreg, group) |> arrange(group) |> pull(n)
 
 plt <- ggplot(scrollaggreg, aes(x = group, y = pixels_per_min)) +
     geom_boxplot() +
-    scale_x_discrete(labels = sprintf(c("without summary panel\nN=%d", "with summary panel\nN=%d"), n_ctrl_treat)) +
+    scale_x_discrete(labels = sprintf(c("without summary\npanel (N=%d)", "with summary\npanel (N=%d)"), n_ctrl_treat)) +
     labs(title = "",   # title = "Mean scrolling distance"
          x = "", y = "Pixels / minute")
 plt
-ggsave("figures/summarypanel_scrolldist.png", plt, width = 1000, height = 1200, units = "px")
+ggsave("figures/summarypanel_scrolldist.png", plt, width = 1000, height = 1200, units = "px", scale = 1.6, dpi = 600)
 
 plt <- ggplot(scrollaggreg, aes(x = group, y = pixels_per_min)) +
     geom_boxplot() +
@@ -115,11 +104,11 @@ time_chapt1 <- group_by(attention_spans_chapt1, group, user_code) |>
 
 plt <- ggplot(time_chapt1, aes(x = group, y = duration_minutes)) +
     geom_boxplot() +
-    scale_x_discrete(labels = sprintf(c("without summary panel\nN=%d", "with summary panel\nN=%d"), n_ctrl_treat)) +
+    scale_x_discrete(labels = sprintf(c("without summary\npanel (N=%d)", "with summary\npanel (N=%d)"), n_ctrl_treat)) +
     labs(title = "",   # title = "Time spent in the first chapter"
          x = "", y = "Duration in minutes")
 plt
-ggsave("figures/summarypanel_duration.png", plt, width = 1000, height = 1200, units = "px")
+ggsave("figures/summarypanel_duration.png", plt, width = 1000, height = 1200, units = "px", scale = 1.6, dpi = 600)
 
 t.test(duration_minutes ~ group, time_chapt1, alternative = "greater")
 
@@ -279,5 +268,5 @@ plts <- lapply(1:length(items), function(i) {
 p <- wrap_plots(plts, ncol = 1)
 p
 
-ggsave("figures/survey_results.png", p, width = 1000, height = 1000, units = "px", scale = 2)
+ggsave("figures/survey_results.png", p, width = 1000, height = 1400, units = "px", scale = 3, dpi = 600)
 

@@ -65,7 +65,9 @@ tracking_sess_times <- function(tracking_data) {
 # Get all tracking data related to question submissions in `tracking_data`.
 # Optionally reorder the `ex_label` variable according to `ex_label_order`
 question_submit_data <- function(tracking_data, ex_label_order = NULL) {
-    quest_data <- filter(tracking_data, type == "question_submit", !startsWith(as.character(ex_label), "survey_")) |>
+    quest_data <- filter(tracking_data, type == "question_submit",
+                         !startsWith(as.character(ex_label), "survey_"),
+                         !startsWith(as.character(ex_label), "survey-")) |>
         select(user_code, group, event_time, ex_label, ex_correct, value) |>
         mutate(ex_label = factor(ex_label))  # update levels
 
@@ -85,7 +87,7 @@ survey_data <- function(tracking_data) {
 
     filter(tracking_data, type == "question_submit", !is.na(ex_label)) |>
         mutate(ex_label = as.character(ex_label)) |>
-        filter(startsWith(ex_label, 'survey_')) |>
+        filter(startsWith(ex_label, 'survey_') | startsWith(ex_label, 'survey-')) |>
         select(app_session, group, user_app_sess_code, track_sess_id, ex_label, value) |>
         mutate(item = substr(ex_label, nchar('survey_') + 1, nchar(ex_label))) |>
         select(-ex_label) |>
@@ -217,7 +219,7 @@ mouse_tracks_features <- function(mouse_tracks_data) {
 # ----- plotting functions -----
 
 # Plot tracking session durations given in `track_sess_times` (as returned from `tracking_sess_times()`).
-plot_tracking_sess_durations <- function(track_sess_times, by_user_code = FALSE) {
+plot_tracking_sess_durations <- function(track_sess_times, by_user_code = FALSE, color_legend = TRUE) {
     if (by_user_code) {
         ggplot(track_sess_times, aes(y = user_code)) +
             geom_linerange(aes(xmin = track_sess_start, xmax = track_sess_end), alpha = 0.5) +
@@ -225,11 +227,17 @@ plot_tracking_sess_durations <- function(track_sess_times, by_user_code = FALSE)
             geom_point(aes(x = track_sess_end), alpha = 0.5) +
             labs(title = "Tracking session start and end times", x = "Date", y = "User ID")
     } else {
-        ggplot(track_sess_times, aes(y = ordered(track_sess_id), color = user_code)) +
+        p <- ggplot(track_sess_times, aes(y = ordered(track_sess_id), color = user_code)) +
             geom_linerange(aes(xmin = track_sess_start, xmax = track_sess_end)) +
             geom_point(aes(x = track_sess_start)) +
             geom_point(aes(x = track_sess_end)) +
             labs(title = "Tracking session start and end times", x = "Date", y = "Tracking session ID")
+
+        if (!color_legend) {
+            p <- p + scale_color_discrete(guide = NULL)
+        }
+
+        p
     }
 }
 

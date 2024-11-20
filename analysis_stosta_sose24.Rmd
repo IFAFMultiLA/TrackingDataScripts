@@ -1,5 +1,5 @@
 ---
-title: "Data analysis *Testgenauigkeit Bayes* from exercise session *Stochastik und ind. Statistik* (Master Wirtschaftsinformatik) / May 15 2024"
+title: "Data analysis *Testgenauigkeit Bayes* from exercise sessions *Stochastik und ind. Statistik* (Master Wirtschaftsinformatik) / May & Nov 2024"
 author: "Markus Konrad"
 date: "2024-05-16"
 output: html_document
@@ -22,29 +22,31 @@ tracking_data <- load_app_sessions_tracking_data(c("36263541b9", "e47a7d46bf"), 
 ```{r}
 track_sess_times <- tracking_sess_times(tracking_data)
 
-plot_tracking_sess_durations(track_sess_times)
+plot_tracking_sess_durations(track_sess_times, color_legend = FALSE)
 ```
 
 ### Limit tracking session events to exercise time frame
 
+#### Exercises 1 & 2 in summer 2024
+
 ```{r}
 # conversion to the right timezone is extremely important!
 # all times in `tracking_data` are in UTC (aka GMT)
+
+# exercises 1 & 2 summer 2024
 starttime <- ymd_hm("2024-05-15 11:55", tz = "UTC")
 endtime <- ymd_hm("2024-05-15 15:00", tz = "UTC")
 
-tracking_data <- filter(tracking_data, track_sess_start >= starttime, event_time >= starttime, event_time <= endtime) |>
+tracking_data1 <- filter(tracking_data, track_sess_start >= starttime, event_time >= starttime, event_time <= endtime) |>
     group_by(track_sess_id) |>
     mutate(track_sess_end = min(track_sess_end, max(event_time))) |>
     ungroup()
 
-track_sess_times <- tracking_sess_times(tracking_data)
-
-plot_tracking_sess_durations(track_sess_times)
+tracking_sess_times(tracking_data1) |> plot_tracking_sess_durations()
 ```
 
 ```{r}
-plot_tracking_sess_durations(track_sess_times, by_user_code = TRUE)
+tracking_sess_times(tracking_data1) |> plot_tracking_sess_durations(by_user_code = TRUE)
 ```
 
 - first user: 2 tabs?
@@ -56,18 +58,75 @@ plot_tracking_sess_durations(track_sess_times, by_user_code = TRUE)
 
 
 ```{r}
-tracking_data <- filter(tracking_data, !(user_code %in% c("13d48be01652b32e", "1e8e8090e4bc1355", "9cd0199df2050778")))
-track_sess_times <- tracking_sess_times(tracking_data)
+tracking_data1 <- filter(tracking_data1, !(user_code %in% c("13d48be01652b32e", "1e8e8090e4bc1355", "9cd0199df2050778")))
+tracking_sess_times(tracking_data1) |> plot_tracking_sess_durations()
+```
+
+#### Exercise 1 in winter 2024
+
+```{r}
+# exercise 1 winter 2024
+starttime <- ymd_hm("2024-11-07 10:50", tz = "UTC")
+endtime <- ymd_hm("2024-11-07 13:00", tz = "UTC")
+
+tracking_data2 <- filter(tracking_data, track_sess_start >= starttime, event_time >= starttime, event_time <= endtime) |>
+    group_by(track_sess_id) |>
+    mutate(track_sess_end = min(track_sess_end, max(event_time))) |>
+    ungroup()
+
+tracking_sess_times(tracking_data2) |> plot_tracking_sess_durations()
+```
+
+```{r}
+tracking_sess_times(tracking_data2) |> plot_tracking_sess_durations(by_user_code = TRUE)
+```
+
+```{r}
+tracking_data2 <- filter(tracking_data2, !(user_code %in% c("f057926305efa740")))
+tracking_sess_times(tracking_data2) |> plot_tracking_sess_durations()
+```
+
+#### Exercise 2 in winter 2024
+
+```{r}
+# exercise 2 winter 2024
+starttime <- ymd_hm("2024-11-13 8:30", tz = "UTC")
+endtime <- ymd_hm("2024-11-13 11:00", tz = "UTC")
+
+tracking_data3 <- filter(tracking_data, track_sess_start >= starttime, event_time >= starttime, event_time <= endtime) |>
+    group_by(track_sess_id) |>
+    mutate(track_sess_end = min(track_sess_end, max(event_time))) |>
+    ungroup()
+
+tracking_sess_times(tracking_data3) |> plot_tracking_sess_durations()
+```
+
+```{r}
+tracking_sess_times(tracking_data3) |> plot_tracking_sess_durations(by_user_code = TRUE)
+```
+
+```{r}
+tracking_data3 <- filter(tracking_data3, !(user_code %in% c("f17b4a30ea10fd93")))
+tracking_sess_times(tracking_data3) |> plot_tracking_sess_durations()
+```
+
+#### Data from all exercises
+
+```{r}
+# combine data from all 4 exercises
+tracking_data <- bind_rows(tracking_data1, tracking_data2, tracking_data3)
+rm(tracking_data1, tracking_data2, tracking_data3)
+saveRDS(tracking_data, 'data/sosewise24_tracking_data.rds')
 ```
 
 
 ```{r}
+track_sess_times <- tracking_sess_times(tracking_data)
 plot_tracking_sess_durations(track_sess_times, by_user_code = TRUE)
 ```
 
-
 ```{r}
-plot_tracking_sess_durations_hist(track_sess_times, binwidth = 0.25)
+plot_tracking_sess_durations_hist(track_sess_times, binwidth = 0.1)
 ```
 
 - long interaction time
@@ -97,7 +156,7 @@ distinct(tracking_data, user_code, group) |> count(group)
 ```
 
 
-- all used a desktop PC
+- most used a desktop PC, for 16 p. the form factor is not recorded
 
 ```{r}
 group_by(tracking_data, track_sess_id) |>

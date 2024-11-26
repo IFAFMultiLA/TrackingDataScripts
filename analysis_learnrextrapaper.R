@@ -65,7 +65,7 @@ ggplot(scrollaggreg, aes(x = group, y = n_events_per_min)) +
 
 t.test(pixels_per_min ~ group, scrollaggreg, alternative = "greater")
 
-t.test(n_events_per_min ~ group, scrollaggreg, alternative = "greater")
+#t.test(n_events_per_min ~ group, scrollaggreg, alternative = "greater")
 
 levels(tracking_data$type)
 

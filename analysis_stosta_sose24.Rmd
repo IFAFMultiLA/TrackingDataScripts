@@ -82,7 +82,7 @@ tracking_sess_times(tracking_data2) |> plot_tracking_sess_durations(by_user_code
 ```
 
 ```{r}
-tracking_data2 <- filter(tracking_data2, !(user_code %in% c("f057926305efa740")))
+tracking_data2 <- filter(tracking_data2, !(user_code %in% c("f057926305efa740", "63ad9112390b187b")))
 tracking_sess_times(tracking_data2) |> plot_tracking_sess_durations()
 ```
 
